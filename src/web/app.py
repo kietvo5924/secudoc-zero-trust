@@ -1,10 +1,29 @@
-"""Flask Web Application for SecuDoc."""
+"""Flask Web Application for SecuDoc.
+
+Implements Zero-Trust document issuance, verification, audit ledger inspection,
+and isolated attack simulation with hardened CSRF, rate-limiting, and open-redirect protections.
+"""
 import os
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
-from ..config import SECRET_KEY, MAX_CONTENT_LENGTH, KEY_DIR
+import shutil
+import secrets
+from pathlib import Path
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort
+from ..config import (
+    SECRET_KEY,
+    MAX_CONTENT_LENGTH,
+    KEY_DIR,
+    DEMO_MODE,
+    DEBUG,
+    DATABASE_PATH,
+    ATTACK_SANDBOX_DB,
+    SESSION_COOKIE_HTTPONLY,
+    SESSION_COOKIE_SAMESITE,
+    SESSION_COOKIE_SECURE
+)
 from ..crypto.keys import KeyManager
 from ..crypto.hashing import calculate_bytes_hash, count_bit_differences, get_bit_difference_vector
-from ..crypto.signature import sign_hash
+from ..crypto.signature import sign_hash, verify_signature
+from ..crypto.qr import generate_qr_data_uri
 from ..models.database import DatabaseManager, get_db
 from ..services.auth_service import AuthService, require_role
 from ..services.doc_service import DocumentService
@@ -14,22 +33,60 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 
 
+def is_safe_redirect(target: str | None) -> bool:
+    """Validate that the redirect target is a safe relative path, blocking open redirects."""
+    if not target:
+        return False
+    # Reject protocol-relative URLs (//attacker.com), absolute schemes, and backslash bypasses
+    if target.startswith("//") or "://" in target or "\\" in target:
+        return False
+    return target.startswith("/")
+
+
+def mask_recipient_name(name: str) -> str:
+    """Mask PII recipient names for public-facing unauthenticated landing page."""
+    parts = name.strip().split()
+    if not parts:
+        return "***"
+    if len(parts) == 1:
+        return parts[0][:1] + "***"
+    return " ".join(p[:1] + "***" for p in parts)
+
+
 def create_app(test_config=None) -> Flask:
     """Create and configure the Flask Application."""
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config["SECRET_KEY"] = SECRET_KEY
     app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+    app.config["SESSION_COOKIE_HTTPONLY"] = SESSION_COOKIE_HTTPONLY
+    app.config["SESSION_COOKIE_SAMESITE"] = SESSION_COOKIE_SAMESITE
+    app.config["SESSION_COOKIE_SECURE"] = SESSION_COOKIE_SECURE
+    app.config["DEMO_MODE"] = DEMO_MODE
 
     if test_config:
         app.config.update(test_config)
 
-    db_path = app.config.get("DATABASE_PATH")
-    db_mgr = DatabaseManager(db_path) if db_path else get_db()
+    db_path = app.config.get("DATABASE_PATH", DATABASE_PATH)
+    sandbox_db_path = app.config.get("ATTACK_SANDBOX_DB", ATTACK_SANDBOX_DB)
+
+    db_mgr = DatabaseManager(db_path)
+    sandbox_db_mgr = DatabaseManager(sandbox_db_path)
+
     key_mgr = KeyManager()
     auth_svc = AuthService(db_mgr)
     doc_svc = DocumentService(db_mgr, key_mgr)
     audit_svc = AuditService(db_mgr)
+    sandbox_audit_svc = AuditService(sandbox_db_mgr)
     verify_engine = VerificationEngine(doc_svc, key_mgr, db_mgr)
+
+    app.db_mgr = db_mgr
+    app.sandbox_db_mgr = sandbox_db_mgr
+    app.key_mgr = key_mgr
+    app.auth_svc = auth_svc
+    app.doc_svc = doc_svc
+    app.audit_svc = audit_svc
+    app.sandbox_audit_svc = sandbox_audit_svc
+    app.verify_engine = verify_engine
 
     # Security Headers Middleware
     @app.after_request
@@ -46,9 +103,47 @@ def create_app(test_config=None) -> Flask:
         )
         return response
 
+    def get_or_create_csrf_token() -> str:
+        """Retrieve existing CSRF token from session or generate a cryptographically random one."""
+        if "csrf_token" not in session:
+            session["csrf_token"] = secrets.token_hex(32)
+        return session["csrf_token"]
+
     @app.context_processor
-    def inject_user():
-        return {"current_user": session.get("user")}
+    def inject_context():
+        return {
+            "current_user": session.get("user"),
+            "csrf_token": get_or_create_csrf_token,
+            "demo_mode": app.config.get("DEMO_MODE", False),
+        }
+
+    # CSRF Protection Middleware for state-changing HTTP requests
+    @app.before_request
+    def enforce_csrf():
+        # Ensure session has a token for forms
+        get_or_create_csrf_token()
+
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            # Exclude state-free verification APIs from CSRF
+            if request.path in ("/verify", "/api/verify-hash"):
+                return None
+
+            # Skip CSRF check only if disabled in test config
+            if app.config.get("WTF_CSRF_ENABLED") is False or app.config.get("TESTING_CSRF_DISABLED"):
+                return None
+
+            submitted_token = (
+                request.headers.get("X-CSRFToken")
+                or request.headers.get("X-CSRF-Token")
+                or request.form.get("csrf_token")
+            )
+            expected_token = session.get("csrf_token")
+
+            if not expected_token or not submitted_token or not secrets.compare_digest(submitted_token, expected_token):
+                if request.is_json or request.path.startswith("/api/"):
+                    return jsonify({"error": "Bad Request", "message": "CSRF token missing or invalid"}), 400
+                flash("Lỗi bảo mật: CSRF token không hợp lệ hoặc phiên làm việc đã hết hạn.", "danger")
+                return redirect(request.referrer or url_for("index"))
 
     # ---------------------------------------------------------
     # Public Routes
@@ -66,7 +161,14 @@ def create_app(test_config=None) -> Flask:
                 file_bytes = uploaded_file.read()
                 result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid or None)
 
-        recent_docs = doc_svc.list_documents(limit=5)
+        # Apply Data Minimization: Mask recipient PII on public landing page
+        raw_recent = doc_svc.list_documents(limit=5)
+        recent_docs = []
+        for d in raw_recent:
+            masked_doc = dict(d)
+            masked_doc["recipient_name"] = mask_recipient_name(d["recipient_name"])
+            recent_docs.append(masked_doc)
+
         return render_template("index.html", result=result, recent_docs=recent_docs)
 
     @app.route("/verify", methods=["POST"])
@@ -84,9 +186,8 @@ def create_app(test_config=None) -> Flask:
     @app.route("/api/verify-hash", methods=["POST"])
     def api_verify_hash():
         """
-        Verify a document SHA-256 hash calculated in-browser (Web Crypto API).
-        Preserves client privacy by never uploading sensitive file bytes (PII) to the server.
-        Directly fulfills Personal Privacy / GDPR / Decree 13 requirements.
+        Verify a document SHA-256 hash calculated in-browser (Client-side Hashing / Data Minimization).
+        The raw bytes of sensitive files are not uploaded, but the hash/UUID is looked up on the server.
         """
         data = request.get_json() or {}
         hash_val = data.get("hash", "").strip()
@@ -100,12 +201,33 @@ def create_app(test_config=None) -> Flask:
 
     @app.route("/api/public-key", methods=["GET"])
     def get_public_key():
-        """Export Root Public Key for independent offline verification."""
+        """Export Root Public Key and fingerprint for local trust verification."""
         pem_str = key_mgr.get_public_key_pem()
+        fingerprint = key_mgr.get_public_key_fingerprint()
         return jsonify({
             "key_type": "RSA-2048",
             "format": "SubjectPublicKeyInfo PEM",
-            "public_key_pem": pem_str
+            "sha256_fingerprint": fingerprint,
+            "public_key_pem": pem_str,
+            "trust_model": "Local University Root Key (Prototype Demo)"
+        })
+
+    @app.route("/api/trust-info", methods=["GET"])
+    def get_trust_info():
+        """Provide detailed information on the local trust boundary and root keys."""
+        return jsonify({
+            "system_name": "SecuDoc Zero-Trust Verification Prototype",
+            "academic_course": "Bảo mật mạng máy tính và hệ thống",
+            "key_fingerprint": key_mgr.get_public_key_fingerprint(),
+            "root_public_key_fingerprint": key_mgr.get_public_key_fingerprint(),
+            "trust_model": "Local University Root Key (Prototype Demo)",
+            "algorithm": "RSA-2048 with PKCS#1 v1.5 and SHA-256",
+            "ledger_type": "Cryptographic Hash-Chain (Linear Block-Linked)",
+            "limitations": [
+                "Prototype utilizes local root key pair, not an accredited public PKI/CA.",
+                "Storage is hosted on local SQLite; database security relies on host OS access control.",
+                "Client-side hashing preserves bandwidth and file privacy, but is not a Zero-Knowledge Proof."
+            ]
         })
 
     # ---------------------------------------------------------
@@ -124,15 +246,24 @@ def create_app(test_config=None) -> Flask:
         if request.method == "POST":
             username = request.form.get("username", "").strip()
             password = request.form.get("password", "").strip()
+            client_ip = request.remote_addr or "127.0.0.1"
 
-            user = auth_svc.authenticate(username, password)
+            try:
+                user = auth_svc.authenticate(username, password, client_ip=client_ip)
+            except PermissionError as e:
+                flash(str(e), "danger")
+                return render_template("login.html"), 429
+
             if user:
                 session.clear()
                 session["user"] = user
+                session["csrf_token"] = secrets.token_hex(32)
                 flash(f"Đăng nhập thành công! Chào mừng {user['full_name']}", "success")
-                next_url = request.args.get("next")
-                if next_url and next_url.startswith("/"):
+
+                next_url = request.args.get("next") or request.form.get("next")
+                if is_safe_redirect(next_url):
                     return redirect(next_url)
+
                 if user["role"] == "ISSUER":
                     return redirect(url_for("dashboard"))
                 elif user["role"] == "AUDITOR":
@@ -143,7 +274,7 @@ def create_app(test_config=None) -> Flask:
 
         return render_template("login.html")
 
-    @app.route("/logout")
+    @app.route("/logout", methods=["GET", "POST"])
     def logout():
         session.clear()
         flash("Đã đăng xuất an toàn khỏi hệ thống", "info")
@@ -208,17 +339,17 @@ def create_app(test_config=None) -> Flask:
     @require_role("AUDITOR")
     def audit_page():
         blocks = audit_svc.get_all_audit_blocks()
-        verification_status = audit_svc.verify_chain_integrity()
+        verification_status = audit_svc.verify_chain_integrity(require_genesis=True)
         return render_template("audit.html", blocks=blocks, verification=verification_status)
 
     @app.route("/api/audit/verify", methods=["GET"])
     @require_role("AUDITOR")
     def api_verify_audit():
-        status = audit_svc.verify_chain_integrity()
+        status = audit_svc.verify_chain_integrity(require_genesis=True)
         return jsonify(status)
 
     # ---------------------------------------------------------
-    # Attack Lab Simulator Routes (For Live Demo)
+    # Attack Lab Simulator Routes (Isolated Sandbox)
     # ---------------------------------------------------------
     @app.route("/attack-lab")
     def attack_lab():
@@ -237,7 +368,6 @@ def create_app(test_config=None) -> Flask:
         doc = doc_svc.get_document_by_uuid(doc_uuid) if doc_uuid else None
 
         if not doc:
-            # Fallback to demo sample text
             original_bytes = (
                 b"TRUONG DAI HOC CONG NGHE THONG TIN - BANG TOT NGHIEP\n"
                 b"Sinh vien: NGUYEN VAN A - Xep loai: XUAT SAC - Diem GPA: 3.90\n"
@@ -252,17 +382,16 @@ def create_app(test_config=None) -> Flask:
                 original_bytes = f"Văn bản {doc['title']} của {doc['recipient_name']}".encode("utf-8")
             original_hash = doc["doc_hash"]
 
-        # Flip the first byte
+        # Flip the least significant bit of the first byte
         byte_array = bytearray(original_bytes)
         if len(byte_array) > 0:
-            byte_array[0] ^= 0x01  # Flip least significant bit of first byte
+            byte_array[0] ^= 0x01
         tampered_bytes = bytes(byte_array)
         tampered_hash = calculate_bytes_hash(tampered_bytes)
 
         diff_bits, total_bits, pct = count_bit_differences(original_hash, tampered_hash)
         bit_vector = get_bit_difference_vector(original_hash, tampered_hash)
 
-        # Forensic details of the modification
         orig_byte_val = original_bytes[0] if len(original_bytes) > 0 else 0
         tamp_byte_val = tampered_bytes[0] if len(tampered_bytes) > 0 else 0
         orig_char = chr(orig_byte_val) if 32 <= orig_byte_val <= 126 else f"\\x{orig_byte_val:02x}"
@@ -300,7 +429,7 @@ def create_app(test_config=None) -> Flask:
 
         target_hash = doc["doc_hash"] if doc else calculate_bytes_hash(b"SAMPLE_DATA")
 
-        # Rogue attacker generates a new RSA keypair
+        # Rogue attacker generates a separate RSA keypair
         fake_private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=2048,
@@ -310,7 +439,6 @@ def create_app(test_config=None) -> Flask:
 
         # Check with official public key
         official_public_key = key_mgr.get_public_key()
-        from ..crypto.signature import verify_signature
         is_valid_against_root = verify_signature(official_public_key, target_hash, forged_signature)
 
         return jsonify({
@@ -324,39 +452,79 @@ def create_app(test_config=None) -> Flask:
     @app.route("/api/attack/tamper-db", methods=["POST"])
     @require_role("AUDITOR")
     def api_attack_tamper_db():
-        """Simulate malicious insider editing a database record directly."""
+        """
+        Simulate malicious insider editing an audit record in the ISOLATED SANDBOX database.
+        Strictly prohibited outside DEMO_MODE; never mutates the primary runtime database.
+        """
+        if not app.config.get("DEMO_MODE"):
+            return jsonify({"error": "Forbidden", "message": "Database mutation simulations are disabled outside DEMO_MODE"}), 403
+
         data = request.get_json() or {}
         block_idx = int(data.get("block_index", 0))
-        success = audit_svc.simulate_database_tamper(block_idx, field_to_alter="action", malicious_value="HACKED_ACTION")
-        verification = audit_svc.verify_chain_integrity()
+        field_to_alter = data.get("field", "action")
+        malicious_value = data.get("malicious_value", "HACKED_ACTION")
+
+        # Mutate strictly in the isolated sandbox database
+        success = sandbox_audit_svc.simulate_database_tamper(
+            block_idx,
+            field_to_alter=field_to_alter,
+            malicious_value=malicious_value
+        )
+        verification = sandbox_audit_svc.verify_chain_integrity(require_genesis=True)
+
         return jsonify({
             "tamper_executed": success,
             "tampered_block": block_idx,
+            "target_database": "attack_sandbox.db (ISOLATED)",
             "verification": verification
         })
 
     @app.route("/api/attack/restore-db", methods=["POST"])
     @require_role("AUDITOR")
     def api_attack_restore_db():
-        """Restore database tamper back to authentic state for repeatable live demonstrations."""
+        """
+        Restore tampered block in the ISOLATED SANDBOX database back to authentic state.
+        Restores any block index using recorded snapshots.
+        """
+        if not app.config.get("DEMO_MODE"):
+            return jsonify({"error": "Forbidden", "message": "Database mutation simulations are disabled outside DEMO_MODE"}), 403
+
         data = request.get_json() or {}
         block_idx = int(data.get("block_index", 0))
-        success = audit_svc.restore_database_block(block_idx, field_to_restore="action", original_value="GENESIS")
-        verification = audit_svc.verify_chain_integrity()
+
+        success = sandbox_audit_svc.restore_database_block(block_idx)
+        verification = sandbox_audit_svc.verify_chain_integrity(require_genesis=True)
+
         return jsonify({
             "restore_executed": success,
             "restored_block": block_idx,
+            "target_database": "attack_sandbox.db (ISOLATED)",
             "verification": verification
         })
 
     @app.route("/certificate/<doc_uuid>")
     def view_certificate(doc_uuid):
-        """Display an official verifiable digital credential with QR code and cryptographic proof."""
+        """Display an official verifiable digital credential with REAL scannable QR code and cryptographic proof."""
         doc = doc_svc.get_document_by_uuid(doc_uuid)
         if not doc:
             flash("Không tìm thấy hồ sơ văn bản tương ứng", "danger")
             return redirect(url_for("index"))
+
         public_key_pem = key_mgr.get_public_key_pem()
-        return render_template("certificate.html", doc=doc, public_key_pem=public_key_pem)
+        root_fingerprint = key_mgr.get_public_key_fingerprint()
+
+        # Build absolute verification URL for QR code
+        verify_url = request.url_root.rstrip("/") + "/?uuid=" + doc["doc_uuid"]
+        qr_data_uri = generate_qr_data_uri(verify_url)
+
+        return render_template(
+            "certificate.html",
+            doc=doc,
+            public_key_pem=public_key_pem,
+            root_fingerprint=root_fingerprint,
+            verify_url=verify_url,
+            qr_data_uri=qr_data_uri
+        )
 
     return app
+

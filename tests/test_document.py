@@ -68,13 +68,14 @@ class TestDocumentService(unittest.TestCase):
         self.assertEqual(len(doc["signature"]), 512)
 
         # Verify audit ledger has appended a new ISSUE block
-        with self.db_mgr.get_connection() as conn:
+        with self.db_mgr.connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM audit_blocks WHERE doc_uuid = ?;", (doc["doc_uuid"],))
             block = cursor.fetchone()
             self.assertIsNotNone(block)
             self.assertEqual(block["action"], "ISSUE")
             self.assertEqual(block["payload_hash"], doc["doc_hash"])
+
 
     def test_revoke_document_updates_status_and_appends_block(self):
         """TC-DOC-04: Revoking an active document updates status to REVOKED and adds audit block."""
@@ -98,11 +99,12 @@ class TestDocumentService(unittest.TestCase):
         self.assertEqual(revoked_doc["revocation_reason"], "Violation of examination regulations")
 
         # Verify REVOKE audit block
-        with self.db_mgr.get_connection() as conn:
+        with self.db_mgr.connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM audit_blocks WHERE doc_uuid = ? AND action = 'REVOKE';", (doc["doc_uuid"],))
             block = cursor.fetchone()
             self.assertIsNotNone(block)
+
 
 
 if __name__ == "__main__":

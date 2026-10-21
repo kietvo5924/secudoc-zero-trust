@@ -22,7 +22,9 @@
   </h3>
 
   <form action="{{ url_for('issue_document') }}" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem;">
+
       <div class="form-group">
         <label class="form-label" for="docTitle">Tiêu đề văn bản *</label>
         <input 
@@ -126,12 +128,14 @@
               </a>
               {% if doc.status == 'ACTIVE' %}
                 <form action="{{ url_for('revoke_document', doc_uuid=doc.doc_uuid) }}" method="POST" style="display: inline-block;" onsubmit="return confirm('Bạn có chắc chắn muốn THU HỒI văn bản này không? Thao tác này sẽ đóng một block thu hồi vào sổ cái và không thể hoàn tác!');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="reason" value="Thu hồi theo quyết định của Hội đồng Đào tạo">
                   <button type="submit" class="btn btn-danger" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">
                     Thu Hồi
                   </button>
                 </form>
               {% else %}
+
                 <small style="color: var(--text-dim); display: inline-block; vertical-align: middle;">Đã đóng sổ</small>
               {% endif %}
             </td>

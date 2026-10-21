@@ -4,12 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}SecuDoc - Cổng Thẩm Định Văn Bản Số Chống Giả Mạo{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+
+  {% if demo_mode %}
+  <div style="background: rgba(255, 145, 0, 0.15); border-bottom: 1px solid rgba(255, 145, 0, 0.4); color: #ffb74d; text-align: center; padding: 0.45rem 1rem; font-size: 0.82rem; font-weight: 600;">
+    ⚠️ CHẾ ĐỘ DEMO NỘI BỘ (DEMO_MODE) — Dành riêng cho học tập & nghiên cứu đồ án môn Bảo mật mạng máy tính và hệ thống. Không sử dụng cho dữ liệu văn bằng thực tế!
+  </div>
+  {% endif %}
 
   <!-- Navigation Bar -->
   <header class="navbar">
@@ -22,6 +29,7 @@
       <li class="nav-item">
         <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">Thẩm Định</a>
       </li>
+
       <li class="nav-item">
         <a href="{{ url_for('attack_lab') }}" class="{% if request.endpoint == 'attack_lab' %}active{% endif %}">Attack Lab ⚡</a>
       </li>

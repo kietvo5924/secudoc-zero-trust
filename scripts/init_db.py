@@ -103,4 +103,17 @@ def seed_sample_environment():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Initialize SecuDoc database schema and optional demo fixtures.")
+    parser.add_argument("--seed-demo", action="store_true", default=True, help="Seed sample users and demo documents (Default: True)")
+    parser.add_argument("--clean", action="store_true", help="Clean/reset database before initializing")
+    args = parser.parse_args()
+
+    if args.clean:
+        db_file = Path(DATABASE_PATH)
+        if db_file.exists():
+            db_file.unlink()
+            print(f"[*] Đã xóa cơ sở dữ liệu cũ: {db_file}")
+
     seed_sample_environment()
+

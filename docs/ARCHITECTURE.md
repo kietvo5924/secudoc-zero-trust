@@ -80,13 +80,14 @@ sequenceDiagram
     Web->>DocSvc: Chuyển giao tệp đã khử khuẩn tên (Sanitized)
     DocSvc->>Crypto: Tính toán mã băm tệp SHA-256 (Stream 64KB)
     Crypto-->>DocSvc: Trả về file_hash (64 hex characters)
-    DocSvc->>Crypto: Ký số file_hash + metadata bằng Private Key RSA-2048
-    Crypto-->>DocSvc: Trả về digital_signature (hex format)
+    DocSvc->>Crypto: Xây dựng Canonical Metadata Payload (UUID, Hash, Recipient, Type, Issuer, Time)
+    DocSvc->>Crypto: Ký số Canonical Payload bằng Private Key RSA-2048
+    Crypto-->>DocSvc: Trả về digital_signature (512 hex characters)
     DocSvc->>DB: Lưu bản ghi tài liệu (UUID, Hash, Sig, Metadata, Status: ACTIVE)
     DocSvc->>Audit: Tạo Block mới trong Hash Chain (prev_hash, block_data, block_hash)
     Audit->>DB: Ghi Block vào bảng AuditBlocks
     DocSvc-->>Web: Hoàn tất phát hành
-    Web-->>Issuer: Trả về Phiếu chứng nhận (UUID, Mã xác thực QR, Hash, Signature)
+    Web-->>Issuer: Trả về Phiếu chứng nhận (UUID, Mã QR thật, Hash, Signature)
 ```
 
 ### 2.2. Luồng Thẩm Định Không Tin Cậy (Zero-Trust Verification Flow)
@@ -98,27 +99,34 @@ sequenceDiagram
     participant VerifyEng as Zero-Trust Engine
     participant Crypto as Crypto Engine
     participant DB as SQLite DB
+    participant Audit as Audit Ledger
 
-    Verifier->>Web: POST /verify (Tải tệp cần kiểm tra lên)
-    Web->>VerifyEng: verify_document(file_stream)
-    VerifyEng->>Crypto: Tính SHA-256 của tệp vừa tải lên
-    Crypto-->>VerifyEng: Trả về computed_hash
-    VerifyEng->>DB: Truy vấn tài liệu có doc_hash == computed_hash
-    alt Không tìm thấy doc_hash trong hệ thống
+    Verifier->>Web: POST /verify (Tải tệp cần kiểm tra lên) hoặc /api/verify-hash
+    Web->>VerifyEng: verify_document(file_bytes)
+    VerifyEng->>Crypto: Tính SHA-256 của tệp vừa tải lên (computed_hash)
+    VerifyEng->>DB: Truy vấn tài liệu theo computed_hash hoặc claimed_uuid
+    alt Không tìm thấy trong hệ thống
         DB-->>VerifyEng: None
         VerifyEng-->>Web: Kết luận: NOT_FOUND (Chưa từng phát hành hoặc đã bị sửa nội dung)
     else Tìm thấy bản ghi tài liệu
-        DB-->>VerifyEng: Trả về (doc_uuid, stored_sig, status, issuer_id)
-        alt Trạng thái status == 'REVOKED'
-            VerifyEng-->>Web: Kết luận: REVOKED (Cảnh báo: Văn bản đã bị thu hồi)
-        else Trạng thái ACTIVE -> Xác minh chữ ký số
-            VerifyEng->>Crypto: verify_signature(computed_hash, stored_sig, public_key)
-            alt Chữ ký hợp lệ (Mathematical match)
-                Crypto-->>VerifyEng: Signature Valid = True
-                VerifyEng-->>Web: Kết luận: VERIFIED_AUTHENTIC (100% Chính gốc & Toàn vẹn)
-            else Chữ ký không khớp (Key mismatch or corrupted signature)
-                Crypto-->>VerifyEng: Signature Valid = False
-                VerifyEng-->>Web: Kết luận: INVALID_SIGNATURE (Cảnh báo giả mạo chữ ký)
+        DB-->>VerifyEng: Trả về doc (doc_uuid, doc_hash, recipient_name, doc_type, signature, status)
+        VerifyEng->>Crypto: verify_canonical_signature(public_key, canonical_payload, signature)
+        alt Chữ ký hoặc Metadata không khớp (Bị sửa tên người nhận trong CSDL hoặc chữ ký giả)
+            Crypto-->>VerifyEng: False
+            VerifyEng-->>Web: Kết luận: INVALID_SIGNATURE (Cảnh báo: Hồ sơ hoặc chữ ký bị can thiệp)
+        else Chữ ký hợp lệ -> Kiểm tra chéo trạng thái thu hồi
+            VerifyEng->>DB: Kiểm tra bảng revocations và audit_blocks có action='REVOKE'
+            alt Sổ cái có ghi REVOKE nhưng status trong DB bị sửa lén thành ACTIVE
+                VerifyEng-->>Web: Kết luận: REVOCATION_CONFLICT (Cảnh báo: Gian lận sửa trạng thái CSDL)
+            else Tài liệu có status == 'REVOKED'
+                VerifyEng-->>Web: Kết luận: REVOKED (Văn bản đã bị cơ quan cấp thu hồi)
+            else Kiểm tra toàn vẹn Sổ cái kiểm toán
+                VerifyEng->>Audit: verify_audit_chain(require_genesis=True)
+                alt Sổ cái bị đứt gãy
+                    VerifyEng-->>Web: Kết luận: AUDIT_CHAIN_BROKEN (Cảnh báo: Sổ cái kiểm toán bị xâm phạm)
+                else Chuỗi kiểm toán toàn vẹn
+                    VerifyEng-->>Web: Kết luận: VERIFIED_AUTHENTIC (100% Nguyên bản & Chính gốc)
+                end
             end
         end
     end

@@ -260,6 +260,10 @@
         <div class="crypto-val">{{ doc.signature[:64] }}... ({{ doc.signature|length }} hex chars)</div>
       </div>
       <div class="crypto-row">
+        <div class="crypto-label">FINGERPRINT KHÓA GỐC:</div>
+        <div class="crypto-val" style="color: var(--gold-light);">{{ root_fingerprint }}</div>
+      </div>
+      <div class="crypto-row">
         <div class="crypto-label">THỜI ĐIỂM KÝ SỐ:</div>
         <div class="crypto-val">{{ doc.issued_at }}</div>
       </div>
@@ -291,12 +295,14 @@
 
       <div style="text-align: center; max-width: 420px;">
         <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
-          Văn bản này được bảo vệ bởi thuật toán RSA-PKCS#1 v1.5 kết hợp chuỗi nhật ký Merkle bất biến. Mọi hành vi sửa đổi dù 1 ký tự sẽ làm sai lệch mã băm và bị từ chối thẩm định.
+          Văn bản này được bảo vệ bởi chữ ký số RSA-2048 trên payload chuẩn hóa (canonical payload) kết hợp chuỗi nhật ký băm liên hoàn (Hash-Chain). Mọi can thiệp vào tệp gốc hoặc metadata trong cơ sở dữ liệu đều bị phát hiện ngay lập tức.
         </div>
       </div>
 
       <div class="qr-container">
-        <div id="qrcode-svg"></div>
+        <a href="{{ verify_url }}" target="_blank" title="Bấm để mở liên kết xác minh">
+          <img src="{{ qr_data_uri }}" alt="Mã QR Xác Minh" style="width: 104px; height: 104px; background: #fff; padding: 4px; border-radius: 6px; display: inline-block;">
+        </a>
         <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem;">Quét QR để thẩm định</div>
       </div>
     </div>
@@ -310,45 +316,5 @@
       ← Quay Lại Cổng Thẩm Định
     </a>
   </div>
-
-  <!-- Lightweight Standalone QR Code SVG Generator (No external dependencies) -->
-  <script>
-    (function generateVerifiableQR() {
-      const verifyUrl = window.location.origin + "/?uuid={{ doc.doc_uuid }}";
-      const qrBox = document.getElementById("qrcode-svg");
-      
-      // Inline simple QR generator using SVG
-      // Generate a clean stylized 21x21 QR matrix pattern for demonstration
-      const size = 96;
-      let svg = `<svg width="${size}" height="${size}" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">`;
-      svg += `<rect width="25" height="25" fill="white"/>`;
-      
-      // Draw standard QR finder patterns (top-left, top-right, bottom-left)
-      function drawFinder(ox, oy) {
-        let res = `<rect x="${ox}" y="${oy}" width="7" height="7" fill="black"/>`;
-        res += `<rect x="${ox+1}" y="${oy+1}" width="5" height="5" fill="white"/>`;
-        res += `<rect x="${ox+2}" y="${oy+2}" width="3" height="3" fill="black"/>`;
-        return res;
-      }
-      svg += drawFinder(1, 1);
-      svg += drawFinder(17, 1);
-      svg += drawFinder(1, 17);
-      
-      // Seed data dots using UUID hash
-      const uuidStr = "{{ doc.doc_uuid }}".replace(/-/g, "");
-      for (let r = 0; r < 25; r++) {
-        for (let c = 0; c < 25; c++) {
-          if ((r < 9 && c < 9) || (r < 9 && c > 15) || (r > 15 && c < 9)) continue;
-          const idx = (r * 25 + c) % uuidStr.length;
-          const charCode = uuidStr.charCodeAt(idx);
-          if ((charCode + r + c) % 2 === 0) {
-            svg += `<rect x="${c}" y="${r}" width="1" height="1" fill="black"/>`;
-          }
-        }
-      }
-      svg += `</svg>`;
-      qrBox.innerHTML = svg;
-    })();
-  </script>
 </body>
 </html>

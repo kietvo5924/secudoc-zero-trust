@@ -84,13 +84,13 @@ class TestVerificationPipeline(unittest.TestCase):
     def test_corrupted_signature_detection(self):
         """TC-VERIFY-05: Modifying signature in DB causes INVALID_SIGNATURE verdict."""
         # Directly corrupt signature in SQLite
-        with self.db_mgr.get_connection() as conn:
+        with self.db_mgr.connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE documents SET signature = ? WHERE doc_uuid = ?;",
                 ("f" * 512, self.doc["doc_uuid"])
             )
-            conn.commit()
+
 
         res = self.verify_engine.verify_document(self.original_bytes)
         self.assertEqual(res["status"], "INVALID_SIGNATURE")
@@ -109,6 +109,54 @@ class TestVerificationPipeline(unittest.TestCase):
         fake_hash = "a" * 64
         fake_res = self.verify_engine.verify_hash(fake_hash)
         self.assertEqual(fake_res["status"], "NOT_FOUND")
+
+
+    def test_metadata_tampering_recipient_name(self):
+        """TC-VERIFY-07: Tampering recipient name in DB invalidates canonical signature."""
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE documents SET recipient_name = ? WHERE doc_uuid = ?;",
+                ("Hacker Tampered Name", self.doc["doc_uuid"])
+            )
+
+        res = self.verify_engine.verify_document(self.original_bytes)
+        self.assertEqual(res["status"], "INVALID_SIGNATURE")
+        self.assertFalse(res["signature_valid"])
+        self.assertIn("chữ ký", res["verdict_title"].lower())
+
+    def test_revocation_conflict_detection(self):
+        """TC-VERIFY-08: Maliciously setting status='ACTIVE' when revoked in ledger triggers REVOCATION_CONFLICT."""
+        # 1. Revoke legitimately
+        self.doc_svc.revoke_document(
+            doc_uuid=self.doc["doc_uuid"],
+            revoked_by=1,
+            reason="Violation of examination rules"
+        )
+
+        # 2. Malicious admin updates documents status back to ACTIVE directly in SQLite
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE documents SET status = 'ACTIVE' WHERE doc_uuid = ?;",
+                (self.doc["doc_uuid"],)
+            )
+
+        res = self.verify_engine.verify_document(self.original_bytes)
+        self.assertEqual(res["status"], "REVOCATION_CONFLICT")
+        self.assertFalse(res["is_authentic"])
+
+    def test_broken_audit_chain_detection(self):
+        """TC-VERIFY-09: Corrupting an audit block in SQLite causes verification engine to flag AUDIT_CHAIN_BROKEN."""
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE audit_blocks SET action = 'TAMPERED_ACTION' WHERE block_index = 0;"
+            )
+
+        res = self.verify_engine.verify_document(self.original_bytes)
+        self.assertEqual(res["status"], "AUDIT_CHAIN_BROKEN")
+        self.assertFalse(res["is_authentic"])
 
 
 if __name__ == "__main__":

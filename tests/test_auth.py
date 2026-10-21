@@ -70,6 +70,37 @@ class TestAuthAndRBAC(unittest.TestCase):
         non_existent = self.auth_svc.authenticate("unknown_user", "AnyPassword")
         self.assertIsNone(non_existent)
 
+    def test_failed_login_lockout(self):
+        """TC-AUTH-04: Exceeding LOGIN_MAX_FAILED_ATTEMPTS locks out the IP/username."""
+        test_ip = "192.168.1.100"
+        self.auth_svc.reset_failures(test_ip)
+
+        # Attempt 5 failed logins
+        for _ in range(5):
+            res = self.auth_svc.authenticate("issuer", "WrongPassword!", client_ip=test_ip)
+            self.assertIsNone(res)
+
+        # 6th attempt must be locked out with PermissionError
+        with self.assertRaises(PermissionError) as ctx:
+            self.auth_svc.authenticate("issuer", "IssuerSecurePass2026!", client_ip=test_ip)
+        self.assertIn("Quá nhiều lần đăng nhập thất bại", str(ctx.exception))
+
+        # Resetting failures lifts the lockout
+        self.auth_svc.reset_failures(test_ip)
+        valid = self.auth_svc.authenticate("issuer", "IssuerSecurePass2026!", client_ip=test_ip)
+        self.assertIsNotNone(valid)
+
+    def test_demo_mode_suppression(self):
+        """TC-AUTH-05: DatabaseManager does not seed demo users when DEMO_MODE is False."""
+        no_seed_db_path = Path(self.tmpdir.name) / "no_seed.db"
+        no_seed_mgr = DatabaseManager(no_seed_db_path, seed_demo=False)
+
+        with no_seed_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as cnt FROM users;")
+            row = cursor.fetchone()
+            self.assertEqual(row["cnt"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

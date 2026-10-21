@@ -2,8 +2,14 @@
  * SecuDoc - Client-side UI Interactions, Web Crypto Privacy Verifier & Attack Lab
  */
 
+function getCSRFToken() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute('content') : '';
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // 1. File Dropzone Handling for Standard Mode
+
   const dropzone = document.getElementById("fileDropzone");
   const fileInput = document.getElementById("documentFileInput");
   const fileNameDisplay = document.getElementById("selectedFileName");
@@ -157,7 +163,7 @@ async function handlePrivacyFile(file) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
           <div class="verdict-title">${result.verdict_title}</div>
           <span class="user-badge" style="background: rgba(0, 230, 118, 0.15); color: #00e676; border-color: #00e676;">
-            🔒 ZERO-KNOWLEDGE PROOF (0 BYTE UPLOAD)
+            🔒 CLIENT-SIDE SHA-256 (DATA MINIMIZATION)
           </span>
         </div>
         <p style="font-size: 1rem; margin-bottom: 1.25rem;">${result.explanation}</p>
@@ -178,9 +184,9 @@ async function handlePrivacyFile(file) {
             </div>
           </div>
           <div class="detail-item">
-            <div class="detail-label">BẢO MẬT DỮ LIỆU CÁ NHÂN (PII PROTECTION)</div>
+            <div class="detail-label">GIẢM THIỂU DỮ LIỆU (DATA MINIMIZATION)</div>
             <div class="detail-val" style="color: var(--accent-green);">
-              ✓ TUÂN THỦ NGHỊ ĐỊNH 13/2023 & GDPR (File không rời RAM)
+              ✓ NỘI DUNG TỆP KHÔNG RỜI KHỎI BỘ NHỚ RAM TRÌNH DUYỆT
             </div>
           </div>
         </div>
@@ -208,9 +214,10 @@ async function runBitFlipAttack(docUuid = "") {
   try {
     const res = await fetch("/api/attack/bit-flip", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() },
       body: JSON.stringify({ doc_uuid: docUuid })
     });
+
     const data = await res.json();
 
     // Generate 256-bit Avalanche Heatmap Grid
@@ -315,7 +322,7 @@ async function runSignatureForgery(docUuid = "") {
   try {
     const res = await fetch("/api/attack/forge-signature", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() },
       body: JSON.stringify({ doc_uuid: docUuid })
     });
     const data = await res.json();
@@ -351,7 +358,7 @@ async function runLiveAuditCheck() {
   const resultDiv = document.getElementById("auditLiveResult");
   if (!resultDiv) return;
 
-  resultDiv.innerHTML = `<span style="color: var(--accent-cyan);">Đang quét toán học toàn bộ chuỗi băm Merkle...</span>`;
+  resultDiv.innerHTML = `<span style="color: var(--accent-cyan);">Đang quét toán học toàn bộ chuỗi băm kiểm toán...</span>`;
 
   try {
     const res = await fetch("/api/audit/verify");
@@ -382,23 +389,23 @@ async function runDatabaseTamper(blockIndex = 0) {
   const resultDiv = document.getElementById("auditLiveResult");
   if (!resultDiv) return;
 
-  resultDiv.innerHTML = `<span style="color: var(--accent-red);">Đang can thiệp sửa trực tiếp 1 ô dữ liệu trong SQLite...</span>`;
+  resultDiv.innerHTML = `<span style="color: var(--accent-red);">Đang can thiệp sửa trực tiếp 1 ô dữ liệu trong SQLite Sandbox...</span>`;
 
   try {
     const res = await fetch("/api/attack/tamper-db", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() },
       body: JSON.stringify({ block_index: blockIndex })
     });
     const data = await res.json();
 
     resultDiv.innerHTML = `
       <div class="alert alert-danger" style="margin-top: 1rem;">
-        <strong>🚨 SỔ CÁI BỊ VỠ:</strong> Kẻ tấn công nội bộ đã sửa ô dữ liệu tại Block ${blockIndex}. 
+        <strong>🚨 SỔ CÁI BỊ VỠ (SANDBOX DB):</strong> Kẻ tấn công nội bộ đã sửa ô dữ liệu tại Block ${blockIndex}. 
         Thuật toán băm liên hoàn lập tức phát hiện đứt gãy: "${data.verification.message}"
         <div style="margin-top: 0.75rem;">
           <button type="button" class="btn btn-secondary" onclick="runRestoreDatabase(${blockIndex})" style="font-size: 0.85rem;">
-            🔄 Khôi Phục Dữ Liệu Gốc (Self-Healing Revert)
+            🔄 Khôi Phục Dữ Liệu Gốc (Restore Snapshot)
           </button>
         </div>
       </div>
@@ -409,7 +416,7 @@ async function runDatabaseTamper(blockIndex = 0) {
 }
 
 /**
- * Restore Database Tamper (Self-Healing)
+ * Restore Database Tamper (Snapshot Revert)
  */
 async function runRestoreDatabase(blockIndex = 0) {
   const resultDiv = document.getElementById("auditLiveResult");
@@ -420,18 +427,19 @@ async function runRestoreDatabase(blockIndex = 0) {
   try {
     const res = await fetch("/api/attack/restore-db", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() },
       body: JSON.stringify({ block_index: blockIndex })
     });
     const data = await res.json();
 
     resultDiv.innerHTML = `
       <div class="alert alert-success" style="margin-top: 1rem;">
-        <strong>✓ ĐÃ KHÔI PHỤC TOÀN VẸN:</strong> Block ${blockIndex} đã được hoàn nguyên về 'GENESIS'.
-        Chuỗi băm Merkle đã khôi phục trạng thái toàn vẹn 100%!
+        <strong>✓ ĐÃ KHÔI PHỤC TOÀN VẸN:</strong> Block ${blockIndex} đã được hoàn nguyên về trạng thái gốc từ snapshot.
+        Chuỗi băm kiểm toán đã khôi phục trạng thái toàn vẹn 100%!
       </div>
     `;
   } catch (err) {
     resultDiv.innerHTML = `<div class="alert alert-danger">Lỗi khôi phục: ${err.message}</div>`;
   }
 }
+

@@ -13,6 +13,7 @@
     </div>
 
     <form action="{{ url_for('login', next=request.args.get('next')) }}" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label class="form-label" for="username">Tên đăng nhập:</label>
         <input 
@@ -43,16 +44,18 @@
       </button>
     </form>
 
-    <!-- Demo Credentials Helper -->
-    <div style="margin-top: 2rem; padding: 1.25rem; background: rgba(8, 12, 22, 0.6); border-radius: var(--radius-sm); border: 1px dashed rgba(0, 229, 255, 0.2);">
-      <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent-cyan); margin-bottom: 0.5rem; text-transform: uppercase;">
-        🔑 Tài Khoản Demo Sẵn Có Trong Hệ Thống:
+    {% if demo_mode %}
+    <!-- Demo Credentials Helper (DEMO_MODE Only) -->
+    <div style="margin-top: 2rem; padding: 1.25rem; background: rgba(8, 12, 22, 0.6); border-radius: var(--radius-sm); border: 1px dashed rgba(255, 145, 0, 0.3);">
+      <div style="font-size: 0.8rem; font-weight: 700; color: #ffb74d; margin-bottom: 0.5rem; text-transform: uppercase;">
+        🔑 Tài Khoản Demo Mẫu (Chỉ Hiển Thị Trong DEMO_MODE):
       </div>
       <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
         <div><strong>Người phát hành (Issuer):</strong> <code class="mono" style="color: #fff;">issuer</code> / <code class="mono" style="color: #fff;">IssuerSecurePass2026!</code></div>
         <div><strong>Kiểm toán viên (Auditor):</strong> <code class="mono" style="color: #fff;">auditor</code> / <code class="mono" style="color: #fff;">AuditorPass2026!</code></div>
       </div>
     </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

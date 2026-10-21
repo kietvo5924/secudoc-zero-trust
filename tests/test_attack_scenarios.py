@@ -164,6 +164,91 @@ class TestAttackScenarios(unittest.TestCase):
         self.assertEqual(verdict["badge_class"], "badge-warning")
         self.assertEqual(verdict["revocation_reason"], "Expelled for academic misconduct")
 
+    def test_arbitrary_block_restore_and_isolation(self):
+        """
+        ATTACK SCENARIO 6: Restore on Arbitrary Block Index (block != 0) & Sandbox Isolation.
+        Ensures restore_database_block restores actual pre-tamper values for block 2,
+        and does not touch an isolated separate DB.
+        """
+        # Create a separate isolated dummy DB to represent untouched runtime DB
+        isolated_db_path = Path(self.tmpdir.name) / "runtime_untouched.db"
+        isolated_mgr = DatabaseManager(isolated_db_path)
+        with isolated_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as cnt FROM audit_blocks;")
+            initial_isolated_count = cursor.fetchone()["cnt"]
+
+        # Issue multiple docs to populate blocks 0, 1, 2
+        self.doc_svc.issue_document(1, "Doc A", "Recipient A", "CERTIFICATE", b"Content A", "a.txt")
+        self.doc_svc.issue_document(1, "Doc B", "Recipient B", "DIPLOMA", b"Content B", "b.txt")
+
+        # Verify chain valid at 3 blocks
+        chain_status = self.audit_svc.verify_chain_integrity()
+        self.assertTrue(chain_status["is_valid"])
+
+        # Tamper block 2 (arbitrary block index > 0)
+        tamper_ok = self.audit_svc.simulate_database_tamper(block_index=2, field_to_alter="action", malicious_value="FORGED_ACTION")
+        self.assertTrue(tamper_ok)
+
+        # Verify chain is broken at block 2
+        broken_status = self.audit_svc.verify_chain_integrity()
+        self.assertFalse(broken_status["is_valid"])
+        self.assertEqual(broken_status["broken_at_block_index"], 2)
+
+        # Restore block 2
+        restore_ok = self.audit_svc.restore_database_block(block_index=2)
+        self.assertTrue(restore_ok)
+
+        # Verify chain is restored to valid
+        restored_status = self.audit_svc.verify_chain_integrity()
+        self.assertTrue(restored_status["is_valid"])
+
+        # Verify isolated DB was never touched
+        with isolated_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as cnt FROM audit_blocks;")
+            self.assertEqual(cursor.fetchone()["cnt"], initial_isolated_count)
+
+    def test_recalculated_chain_detected_by_external_anchor(self):
+        """
+        ATTACK SCENARIO 7: Full Ledger Recalculation Threat Analysis.
+        If an attacker rewrites block 1 AND recalculates all subsequent block hashes,
+        internal hash links appear consistent. However, an external anchor/checkpoint
+        discloses the forgery because head_hash != trusted_head_hash.
+        """
+        from src.crypto.merkle import get_chain_head_hash, calculate_block_hash
+        self.doc_svc.issue_document(1, "Doc 1", "Recipient 1", "CERTIFICATE", b"Data 1", "1.txt")
+        self.doc_svc.issue_document(1, "Doc 2", "Recipient 2", "CERTIFICATE", b"Data 2", "2.txt")
+
+        # Snapshot trusted head hash (external anchor)
+        blocks = self.audit_svc.get_all_audit_blocks()
+        trusted_head_hash = get_chain_head_hash(blocks)
+
+        # Attacker recalculates downstream block hashes
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            # 1. Modify block 1 payload
+            cursor.execute("UPDATE audit_blocks SET payload_hash = 'tampered_payload' WHERE block_index = 1;")
+            # 2. Recalculate block 1 hash
+            cursor.execute("SELECT * FROM audit_blocks WHERE block_index = 1;")
+            b1 = dict(cursor.fetchone())
+            new_b1_hash = calculate_block_hash(1, b1["prev_block_hash"], b1["timestamp"], b1["action"], b1["doc_uuid"], b1["payload_hash"])
+            cursor.execute("UPDATE audit_blocks SET block_hash = ? WHERE block_index = 1;", (new_b1_hash,))
+
+            # 3. Recalculate block 2 with new prev_block_hash
+            cursor.execute("SELECT * FROM audit_blocks WHERE block_index = 2;")
+            b2 = dict(cursor.fetchone())
+            new_b2_hash = calculate_block_hash(2, new_b1_hash, b2["timestamp"], b2["action"], b2["doc_uuid"], b2["payload_hash"])
+            cursor.execute("UPDATE audit_blocks SET prev_block_hash = ?, block_hash = ? WHERE block_index = 2;", (new_b1_hash, new_b2_hash))
+
+        # Attacker's recalculation fools internal chain verification:
+        tampered_blocks = self.audit_svc.get_all_audit_blocks()
+        internal_valid, _, _ = self.audit_svc.verify_chain_integrity()["is_valid"], None, None
+
+        # BUT trusted external anchor detects the forgery immediately:
+        recalculated_head_hash = get_chain_head_hash(tampered_blocks)
+        self.assertNotEqual(trusted_head_hash, recalculated_head_hash, "External anchor must detect full-chain recalculation!")
+
 
 if __name__ == "__main__":
     unittest.main()

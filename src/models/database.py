@@ -2,9 +2,11 @@
 import sqlite3
 import hashlib
 import secrets
+import logging
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from ..config import DATABASE_PATH, PASSWORD_HASH_ITERATIONS, PASSWORD_SALT_BYTES
+from ..config import DATABASE_PATH, PASSWORD_HASH_ITERATIONS, PASSWORD_SALT_BYTES, DEMO_MODE
 from ..crypto.merkle import GENESIS_PREV_HASH, calculate_block_hash
 
 
@@ -23,8 +25,9 @@ def _hash_seed_password(password: str) -> tuple[str, str]:
 class DatabaseManager:
     """Manages SQLite connection, schema lifecycle, and database queries."""
 
-    def __init__(self, db_path: str | Path = DATABASE_PATH):
+    def __init__(self, db_path: str | Path = DATABASE_PATH, seed_demo: bool | None = None):
         self.db_path = str(db_path)
+        self.seed_demo = seed_demo if seed_demo is not None else DEMO_MODE
         self.init_db()
 
     def get_connection(self) -> sqlite3.Connection:
@@ -34,10 +37,20 @@ class DatabaseManager:
         conn.execute("PRAGMA foreign_keys = ON;")
         return conn
 
+    @contextmanager
+    def connection_context(self):
+        """Context manager that automatically commits transactions and cleanly closes connections."""
+        conn = self.get_connection()
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
     def init_db(self) -> None:
         """Initialize all database tables and indexes if they do not exist."""
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        with self.get_connection() as conn:
+        with self.connection_context() as conn:
             cursor = conn.cursor()
 
             # 1. Users Table
@@ -75,7 +88,7 @@ class DatabaseManager:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_doc_hash ON documents(doc_hash);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_doc_uuid ON documents(doc_uuid);")
 
-            # 3. Audit Blocks Table (Immutable Hash Chain)
+            # 3. Audit Blocks Table (Tamper-Evident Hash Chain)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS audit_blocks (
                     block_index INTEGER PRIMARY KEY,
@@ -102,15 +115,20 @@ class DatabaseManager:
                 );
             """)
 
-            conn.commit()
-
         # Seed initial data
         self.seed_default_users()
         self.ensure_genesis_block()
 
-    def seed_default_users(self) -> None:
-        """Seed default demo accounts for each role if users table is empty."""
-        with self.get_connection() as conn:
+    def seed_default_users(self, force: bool = False) -> bool:
+        """Seed default demo accounts only in DEMO_MODE or when explicitly forced.
+
+        In production mode (DEMO_MODE=False), no demo accounts are created.
+        """
+        if not self.seed_demo and not force:
+            logging.info("ℹ️  [PRODUCTION] Skipping demo account seeding (seed_demo=False).")
+            return False
+
+        with self.connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) as count FROM users;")
             if cursor.fetchone()["count"] == 0:
@@ -126,11 +144,13 @@ class DatabaseManager:
                         INSERT INTO users (username, password_hash, salt, full_name, role, created_at)
                         VALUES (?, ?, ?, ?, ?, ?);
                     """, (uname, pwd_hash, salt, fname, role, now_str))
-                conn.commit()
+                logging.info("ℹ️  [DEMO_MODE] Seeded demo accounts: issuer, auditor, verifier")
+                return True
+        return False
 
     def ensure_genesis_block(self) -> None:
         """Create the cryptographic Genesis Block if audit_blocks is empty."""
-        with self.get_connection() as conn:
+        with self.connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) as count FROM audit_blocks;")
             if cursor.fetchone()["count"] == 0:
@@ -148,7 +168,6 @@ class DatabaseManager:
                     INSERT INTO audit_blocks (block_index, prev_block_hash, timestamp, action, doc_uuid, payload_hash, block_hash)
                     VALUES (?, ?, ?, ?, ?, ?, ?);
                 """, (0, GENESIS_PREV_HASH, now_str, "GENESIS", "00000000-0000-0000-0000-000000000000", genesis_payload, block_hash))
-                conn.commit()
 
 
 _db_manager = None
@@ -159,3 +178,4 @@ def get_db(db_path: str | Path = DATABASE_PATH) -> DatabaseManager:
     if _db_manager is None:
         _db_manager = DatabaseManager(db_path)
     return _db_manager
+

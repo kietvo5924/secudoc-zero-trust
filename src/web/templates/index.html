@@ -18,13 +18,14 @@
     📤 Chế Độ 1: Thẩm Định Tiêu Chuẩn (Tải Tệp)
   </button>
   <button type="button" id="tabPrivacy" class="btn btn-secondary" onclick="switchVerifyMode('privacy')" style="padding: 0.6rem 1.5rem; font-size: 0.95rem; border-color: var(--accent-cyan);">
-    🔒 Chế Độ 2: Thẩm Định Riêng Tư (Web Crypto - 0 Byte Upload)
+    🔒 Chế Độ 2: Thẩm Định Giảm Thiểu Dữ Liệu (Client-Side SHA-256)
   </button>
 </div>
 
 <!-- Mode 1: Standard Server Verification -->
 <div class="glass-card" id="modeStandardCard">
   <form action="{{ url_for('index') }}" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="dropzone" id="fileDropzone">
       <div class="dropzone-icon">📥</div>
       <div class="dropzone-text">Kéo thả tệp văn bản cần thẩm định vào đây hoặc bấm để chọn tệp</div>
@@ -54,21 +55,21 @@
   </form>
 </div>
 
-<!-- Mode 2: In-Browser Zero-Knowledge Privacy Verification -->
+<!-- Mode 2: In-Browser Client-Side Hashing (Data Minimization) -->
 <div class="glass-card" id="modePrivacyCard" style="display: none; border-left: 5px solid var(--accent-cyan);">
   <div style="margin-bottom: 1.25rem;">
     <h3 style="color: var(--accent-cyan); display: flex; align-items: center; gap: 0.5rem;">
-      <span>🔒</span> Thẩm Định Bảo Mật Riêng Tư (Privacy-Preserving In-Browser Verification)
+      <span>🔒</span> Thẩm Định Giảm Thiểu Dữ Liệu (Client-Side SHA-256 Data Minimization)
     </h3>
     <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.5;">
-      Tuân thủ <strong>Nghị định 13/2023/NĐ-CP</strong> và <strong>GDPR</strong>: Tệp của bạn chứa dữ liệu cá nhân nhạy cảm? Trình duyệt của bạn sẽ tự tính toán mã băm SHA-256 bằng <strong>Web Crypto API</strong> trực tiếp trong RAM máy tính của bạn. <strong style="color: #00e676;">0 byte dữ liệu cá nhân bị truyền qua mạng</strong>; máy chủ chỉ nhận chuỗi hash 64 ký tự để đối soát chữ ký số!
+      Nguyên tắc <strong>Giảm thiểu Dữ liệu (Data Minimization)</strong>: Trình duyệt của bạn sẽ tự tính toán mã băm SHA-256 bằng <strong>Web Crypto API</strong> trực tiếp trong bộ nhớ máy trạm. <strong style="color: #00e676;">Nội dung bytes của tệp không rời khỏi máy trạm</strong>; hệ thống chỉ gửi chuỗi hash 64 ký tự và UUID lên máy chủ để tra cứu chữ ký số và trạng thái thu hồi.
     </p>
   </div>
 
   <div class="dropzone" id="privacyDropzone" style="border-color: var(--accent-cyan);">
     <div class="dropzone-icon">🛡️</div>
-    <div class="dropzone-text">Chọn tệp để băm ngoại tuyến ngay trong trình duyệt (Không upload file)</div>
-    <div class="dropzone-hint">Dữ liệu được xử lý cục bộ 100% bằng JavaScript Web Crypto</div>
+    <div class="dropzone-text">Chọn tệp để tính mã băm ngay trong trình duyệt (Không gửi file bytes)</div>
+    <div class="dropzone-hint">Dữ liệu được xử lý cục bộ bằng JavaScript Web Crypto API</div>
     <input type="file" id="privacyFileInput">
     <div id="privacyFileName" class="file-selected-name" style="display: none;"></div>
   </div>
@@ -87,6 +88,7 @@
 
   <div id="privacyStatusArea" style="margin-top: 1.5rem;"></div>
 </div>
+
 
 <!-- Verification Result Display -->
 {% if result %}
