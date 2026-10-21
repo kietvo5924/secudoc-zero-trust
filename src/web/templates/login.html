@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}SecuDoc - Đăng Nhập Hệ Thống{% endblock %}
+
+{% block content %}
+<div style="max-width: 480px; margin: 3rem auto;">
+  <div class="glass-card">
+    <div style="text-align: center; margin-bottom: 2rem;">
+      <h2 style="font-size: 1.8rem; margin-bottom: 0.5rem;">Cổng Đăng Nhập Quản Trị</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">
+        Xác thực bảo mật PBKDF2-HMAC-SHA256 & Phân quyền RBAC
+      </p>
+    </div>
+
+    <form action="{{ url_for('login', next=request.args.get('next')) }}" method="POST">
+      <div class="form-group">
+        <label class="form-label" for="username">Tên đăng nhập:</label>
+        <input 
+          type="text" 
+          id="username" 
+          name="username" 
+          class="form-control" 
+          placeholder="Nhập tên đăng nhập" 
+          required 
+          autofocus
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Mật khẩu:</label>
+        <input 
+          type="password" 
+          id="password" 
+          name="password" 
+          class="form-control" 
+          placeholder="Nhập mật khẩu an toàn" 
+          required
+        >
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.85rem; margin-top: 1rem;">
+        🔐 Đăng Nhập An Toàn
+      </button>
+    </form>
+
+    <!-- Demo Credentials Helper -->
+    <div style="margin-top: 2rem; padding: 1.25rem; background: rgba(8, 12, 22, 0.6); border-radius: var(--radius-sm); border: 1px dashed rgba(0, 229, 255, 0.2);">
+      <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent-cyan); margin-bottom: 0.5rem; text-transform: uppercase;">
+        🔑 Tài Khoản Demo Sẵn Có Trong Hệ Thống:
+      </div>
+      <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
+        <div><strong>Người phát hành (Issuer):</strong> <code class="mono" style="color: #fff;">issuer</code> / <code class="mono" style="color: #fff;">IssuerSecurePass2026!</code></div>
+        <div><strong>Kiểm toán viên (Auditor):</strong> <code class="mono" style="color: #fff;">auditor</code> / <code class="mono" style="color: #fff;">AuditorPass2026!</code></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

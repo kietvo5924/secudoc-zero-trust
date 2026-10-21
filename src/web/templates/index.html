@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}SecuDoc - Cổng Thẩm Định Văn Bản Số Zero-Trust{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 2.5rem;">
+  <h1 style="font-size: 2.5rem; margin-bottom: 0.75rem;">
+    Thẩm Định Tính Toàn Vẹn <span style="color: var(--accent-cyan);">Văn Bản Số</span>
+  </h1>
+  <p style="color: var(--text-muted); max-width: 750px; margin: 0 auto; font-size: 1.1rem;">
+    Áp dụng nguyên tắc <strong style="color: #fff;">Zero-Trust</strong>: <em>"Không mặc định tin tưởng bất kỳ tệp dữ liệu nào chỉ vì nó mang con dấu hay giao diện giống thật."</em> Hệ thống xác thực bằng toán học mật mã học độc lập.
+  </p>
+</div>
+
+<!-- Mode Switcher Tabs -->
+<div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+  <button type="button" id="tabStandard" class="btn btn-primary" onclick="switchVerifyMode('standard')" style="padding: 0.6rem 1.5rem; font-size: 0.95rem;">
+    📤 Chế Độ 1: Thẩm Định Tiêu Chuẩn (Tải Tệp)
+  </button>
+  <button type="button" id="tabPrivacy" class="btn btn-secondary" onclick="switchVerifyMode('privacy')" style="padding: 0.6rem 1.5rem; font-size: 0.95rem; border-color: var(--accent-cyan);">
+    🔒 Chế Độ 2: Thẩm Định Riêng Tư (Web Crypto - 0 Byte Upload)
+  </button>
+</div>
+
+<!-- Mode 1: Standard Server Verification -->
+<div class="glass-card" id="modeStandardCard">
+  <form action="{{ url_for('index') }}" method="POST" enctype="multipart/form-data">
+    <div class="dropzone" id="fileDropzone">
+      <div class="dropzone-icon">📥</div>
+      <div class="dropzone-text">Kéo thả tệp văn bản cần thẩm định vào đây hoặc bấm để chọn tệp</div>
+      <div class="dropzone-hint">Hỗ trợ định dạng: PDF, DOCX, PNG, JPG, TXT (Tối đa 10MB)</div>
+      <input type="file" name="document_file" id="documentFileInput" required>
+      <div id="selectedFileName" class="file-selected-name" style="display: none;"></div>
+    </div>
+
+    <div class="form-group" style="margin-top: 1.5rem;">
+      <label class="form-label" for="claimedUuid">
+        Mã UUID Chứng Nhận (Không bắt buộc - nhập nếu muốn đối soát cụ thể):
+      </label>
+      <input 
+        type="text" 
+        id="claimedUuid" 
+        name="claimed_uuid" 
+        class="form-control mono" 
+        placeholder="Ví dụ: 8a4b6c2d-9e1f-4a3b-8c5d-7e9f1a2b3c4d"
+      >
+    </div>
+
+    <div style="text-align: right; margin-top: 1.5rem;">
+      <button type="submit" class="btn btn-primary" style="padding: 0.9rem 2.5rem; font-size: 1rem;">
+        🔍 Thẩm Định Toán Học Ngay Lập Tức
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Mode 2: In-Browser Zero-Knowledge Privacy Verification -->
+<div class="glass-card" id="modePrivacyCard" style="display: none; border-left: 5px solid var(--accent-cyan);">
+  <div style="margin-bottom: 1.25rem;">
+    <h3 style="color: var(--accent-cyan); display: flex; align-items: center; gap: 0.5rem;">
+      <span>🔒</span> Thẩm Định Bảo Mật Riêng Tư (Privacy-Preserving In-Browser Verification)
+    </h3>
+    <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.5;">
+      Tuân thủ <strong>Nghị định 13/2023/NĐ-CP</strong> và <strong>GDPR</strong>: Tệp của bạn chứa dữ liệu cá nhân nhạy cảm? Trình duyệt của bạn sẽ tự tính toán mã băm SHA-256 bằng <strong>Web Crypto API</strong> trực tiếp trong RAM máy tính của bạn. <strong style="color: #00e676;">0 byte dữ liệu cá nhân bị truyền qua mạng</strong>; máy chủ chỉ nhận chuỗi hash 64 ký tự để đối soát chữ ký số!
+    </p>
+  </div>
+
+  <div class="dropzone" id="privacyDropzone" style="border-color: var(--accent-cyan);">
+    <div class="dropzone-icon">🛡️</div>
+    <div class="dropzone-text">Chọn tệp để băm ngoại tuyến ngay trong trình duyệt (Không upload file)</div>
+    <div class="dropzone-hint">Dữ liệu được xử lý cục bộ 100% bằng JavaScript Web Crypto</div>
+    <input type="file" id="privacyFileInput">
+    <div id="privacyFileName" class="file-selected-name" style="display: none;"></div>
+  </div>
+
+  <div class="form-group" style="margin-top: 1.5rem;">
+    <label class="form-label" for="privacyClaimedUuid">
+      Mã UUID Chứng Nhận (Tùy chọn):
+    </label>
+    <input 
+      type="text" 
+      id="privacyClaimedUuid" 
+      class="form-control mono" 
+      placeholder="Ví dụ: 8a4b6c2d-9e1f-4a3b-8c5d-7e9f1a2b3c4d"
+    >
+  </div>
+
+  <div id="privacyStatusArea" style="margin-top: 1.5rem;"></div>
+</div>
+
+<!-- Verification Result Display -->
+{% if result %}
+<div class="glass-card" style="border-color: var(--border-glow);">
+  <div class="verdict-banner {{ result.badge_class }}">
+    <div class="verdict-title">
+      {{ result.verdict_title }}
+    </div>
+    <p style="font-size: 1.05rem; margin-bottom: 1.5rem;">
+      {{ result.explanation }}
+    </p>
+
+    <!-- Forensic Details Grid -->
+    <div class="details-grid">
+      <div class="detail-item">
+        <div class="detail-label">MÃ BĂM TÍNH TOÁN CỦA TỆP TẢI LÊN (SHA-256 COMPUTED)</div>
+        <div class="detail-val mono" style="font-size: 0.8rem; color: #80d8ff;">
+          {{ result.computed_hash or 'N/A' }}
+        </div>
+      </div>
+
+      <div class="detail-item">
+        <div class="detail-label">MÃ BĂM KỲ VỌNG TRONG CHỨNG THỰC (EXPECTED HASH)</div>
+        <div class="detail-val mono" style="font-size: 0.8rem; color: #b388ff;">
+          {{ result.expected_hash or 'KHÔNG TÌM THẤY TRONG HỆ THỐNG' }}
+        </div>
+      </div>
+
+      <div class="detail-item">
+        <div class="detail-label">XÁC MINH CHỮ KÝ SỐ RSA-2048</div>
+        <div class="detail-val">
+          {% if result.signature_valid %}
+            <span style="color: var(--accent-green);">✓ HỢP LỆ (Signed by Root Key)</span>
+          {% else %}
+            <span style="color: var(--accent-red);">✗ KHÔNG HỢP LỆ / BỊ LÀM GIẢ</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="detail-item">
+        <div class="detail-label">TRẠNG THÁI HIỆU LỰC VĂN BẢN</div>
+        <div class="detail-val">
+          {% if result.document %}
+            {% if result.document.status == 'ACTIVE' %}
+              <span style="color: var(--accent-green); font-weight: 700;">● ĐANG CÓ HIỆU LỰC</span>
+            {% else %}
+              <span style="color: var(--accent-red); font-weight: 700;">● ĐÃ BỊ THU HỒI (REVOKED)</span>
+            {% endif %}
+          {% else %}
+            <span style="color: var(--text-muted);">KHÔNG XÁC ĐỊNH</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if result.document %}
+      <div style="margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+        <h4 style="margin-bottom: 0.75rem; color: var(--accent-cyan);">THÔNG TIN HỒ SƠ VĂN BẢN ĐÃ CẤP:</h4>
+        <div class="details-grid">
+          <div class="detail-item">
+            <div class="detail-label">MÃ ĐỊNH DANH (UUID)</div>
+            <div class="detail-val mono" style="font-size: 0.85rem;">{{ result.document.doc_uuid }}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">TIÊU ĐỀ VĂN BẢN</div>
+            <div class="detail-val">{{ result.document.title }}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">NGƯỜI THỤ HƯỞNG (RECIPIENT)</div>
+            <div class="detail-val" style="color: var(--accent-green);">{{ result.document.recipient_name }}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">CƠ QUAN BAN HÀNH (ISSUER)</div>
+            <div class="detail-val">{{ result.document.issuer_name }}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">THỜI ĐIỂM KÝ SỐ</div>
+            <div class="detail-val mono" style="font-size: 0.85rem;">{{ result.document.issued_at }}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">TÊN TỆP GỐC</div>
+            <div class="detail-val">{{ result.document.original_filename }} ({{ (result.document.file_size / 1024)|round(1) }} KB)</div>
+          </div>
+          <div class="detail-item" style="grid-column: 1 / -1; margin-top: 0.75rem; text-align: right;">
+            <a href="/certificate/{{ result.document.doc_uuid }}" target="_blank" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; padding: 0.6rem 1.25rem;">
+              📜 Mở Phiếu Chứng Thực Số & Quét QR Code
+            </a>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Quick Reference Sample Documents -->
+{% if recent_docs %}
+<div class="glass-card" style="margin-top: 2rem;">
+  <div class="card-header">
+    <h3>📋 Các Văn Bản Mẫu Đã Phát Hành Gần Đây Trong Hệ Thống</h3>
+    <span style="color: var(--text-muted); font-size: 0.85rem;">Dùng để đối soát hoặc sao chép UUID kiểm tra</span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="secu-table">
+      <thead>
+        <tr>
+          <th>Tiêu Đề</th>
+          <th>Người Nhận</th>
+          <th>Loại Văn Bản</th>
+          <th>Mã UUID</th>
+          <th>Mã Băm SHA-256</th>
+          <th>Trạng Thái</th>
+          <th>Phiếu Số</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in recent_docs %}
+        <tr>
+          <td><strong>{{ doc.title }}</strong></td>
+          <td>{{ doc.recipient_name }}</td>
+          <td><span class="user-badge" style="background: rgba(0, 229, 255, 0.1); color: var(--accent-cyan); border-color: rgba(0, 229, 255, 0.2);">{{ doc.doc_type }}</span></td>
+          <td>
+            <span class="hash-pill mono">{{ doc.doc_uuid[:8] }}... 
+              <button type="button" class="copy-btn" data-copy="{{ doc.doc_uuid }}" title="Sao chép UUID">📋</button>
+            </span>
+          </td>
+          <td>
+            <span class="hash-pill mono">{{ doc.doc_hash[:12] }}...
+              <button type="button" class="copy-btn" data-copy="{{ doc.doc_hash }}" title="Sao chép Hash">📋</button>
+            </span>
+          </td>
+          <td>
+            {% if doc.status == 'ACTIVE' %}
+              <span style="color: var(--accent-green); font-weight: 700;">● Có hiệu lực</span>
+            {% else %}
+              <span style="color: var(--accent-red); font-weight: 700;">● Đã thu hồi</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/certificate/{{ doc.doc_uuid }}" target="_blank" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem; text-decoration: none;">
+              📜 Xem
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

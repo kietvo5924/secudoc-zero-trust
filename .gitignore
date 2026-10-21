@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environments
+.env
+.venv/
+venv/
+ENV/
+env/
+
+# Database and SQLite runtime files
+*.sqlite3
+*.db
+data/secudoc.db
+data/uploads/*
+!data/uploads/.gitkeep
+data/keys/*
+!data/keys/.gitkeep
+
+# Sensitive Cryptographic Keys
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Internal Prompts & AI Templates (Protect academic integrity)
+Prompt_Master_Gui_Thang_Cho_AI_Agent_Bao_Mat.docx
+extracted_prompt.txt
+prompt*.txt
+*master_prompt*
+
+# IDE, Editors, and OS files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+.directory
+.gemini/
+
+# Logs and temporary build files
+*.log
+*.tmp
+*.bak
+*.swp

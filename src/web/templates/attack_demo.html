@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}SecuDoc - Phòng Thí Nghiệm Tấn Công (Attack Lab){% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 2.5rem;">
+  <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">
+    ⚡ Phòng Thí Nghiệm <span style="color: var(--accent-red);">Mô Phỏng Tấn Công</span>
+  </h1>
+  <p style="color: var(--text-muted); max-width: 800px; margin: 0 auto; font-size: 1.05rem;">
+    Trực tiếp thực thi các kịch bản xâm nhập, can thiệp dữ liệu và giả mạo chữ ký số trong môi trường cô lập để kiểm chứng thực nghiệm khả năng phòng thủ của hệ thống.
+  </p>
+</div>
+
+<!-- Attack Scenario 1: Bit-Flip Tampering -->
+<div class="glass-card" style="border-left: 5px solid var(--accent-red);">
+  <div class="card-header">
+    <div>
+      <h3 style="color: var(--accent-red); margin-bottom: 0.25rem;">
+        Kịch Bản 1: Tấn Công Sửa Đổi Dữ Liệu Từng Byte (Bit-Flip Tampering Attack)
+      </h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">
+        Kẻ gian dùng công cụ sửa 1 ký tự điểm số trong tệp PDF/bảng điểm. Hệ thống sử dụng hiệu ứng tuyết lở SHA-256 để phát hiện và chặn đứng.
+      </p>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+    <select id="bitFlipDocSelect" class="form-control" style="max-width: 380px; background: #080c16;">
+      <option value="">-- Dùng văn bản mẫu giả lập tích hợp sẵn --</option>
+      {% for doc in recent_docs %}
+        <option value="{{ doc.doc_uuid }}">{{ doc.title }} ({{ doc.recipient_name }})</option>
+      {% endfor %}
+    </select>
+
+    <button type="button" class="btn btn-danger" onclick="runBitFlipAttack(document.getElementById('bitFlipDocSelect').value)">
+      💥 Thực Thi Đảo 1 Bit & Thẩm Định Ngay
+    </button>
+  </div>
+
+  <div id="bitFlipResult"></div>
+</div>
+
+<!-- Attack Scenario 2: Signature Forgery -->
+<div class="glass-card" style="border-left: 5px solid var(--accent-amber);">
+  <div class="card-header">
+    <div>
+      <h3 style="color: var(--accent-amber); margin-bottom: 0.25rem;">
+        Kịch Bản 2: Tấn Công Giả Mạo Chữ Ký Số (Rogue Key Signature Forgery)
+      </h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">
+        Kẻ mạo danh tự sinh cặp khóa RSA-2048 bất đối xứng của riêng mình, ký số lên văn bản và tự nhận là văn bản chính gốc từ Trường Đại học.
+      </p>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+    <select id="forgeryDocSelect" class="form-control" style="max-width: 380px; background: #080c16;">
+      <option value="">-- Dùng văn bản mẫu giả lập tích hợp sẵn --</option>
+      {% for doc in recent_docs %}
+        <option value="{{ doc.doc_uuid }}">{{ doc.title }} ({{ doc.recipient_name }})</option>
+      {% endfor %}
+    </select>
+
+    <button type="button" class="btn btn-warning" onclick="runSignatureForgery(document.getElementById('forgeryDocSelect').value)">
+      ⚡ Sinh Khóa Rogue & Thử Nghiệm Giả Mạo
+    </button>
+  </div>
+
+  <div id="forgeryResult"></div>
+</div>
+
+<!-- Attack Scenario 3 & 4 Explanation Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem;">
+  <div class="glass-card" style="border-left: 5px solid var(--accent-purple);">
+    <h3 style="color: #b388ff; margin-bottom: 0.5rem;">
+      Kịch Bản 3: Vượt Rào Thu Hồi (Revocation Bypass)
+    </h3>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+      Ứng viên bị kỷ luật và bằng cấp bị cơ quan ban hành thu hồi. Ứng viên vẫn cố tình đem tệp bằng cấp gốc đi xin việc.
+    </p>
+    <div style="background: rgba(8, 12, 22, 0.6); padding: 1rem; border-radius: var(--radius-sm); font-size: 0.85rem; color: #f0f4fc;">
+      <strong>🛡️ Cơ chế ngăn chặn:</strong> Mặc dù chữ ký số và mã băm SHA-256 hoàn toàn hợp lệ, bước số 5 trong quy trình Zero-Trust kiểm tra danh sách thu hồi thời gian thực và trả về trạng thái <span style="color: var(--accent-amber); font-weight: 700;">REVOKED</span> kèm lý do kỷ luật.
+    </div>
+  </div>
+
+  <div class="glass-card" style="border-left: 5px solid var(--accent-cyan);">
+    <h3 style="color: var(--accent-cyan); margin-bottom: 0.5rem;">
+      Kịch Bản 4: Tải Mã Độc & Path Traversal
+    </h3>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+      Hacker cố tình đặt tên tệp là <code class="mono" style="color: #ff8a80;">../../etc/shadow.exe</code> hoặc tải lên tệp dung lượng 2GB để đánh sập máy chủ thẩm định.
+    </p>
+    <div style="background: rgba(8, 12, 22, 0.6); padding: 1rem; border-radius: var(--radius-sm); font-size: 0.85rem; color: #f0f4fc;">
+      <strong>🛡️ Cơ chế ngăn chặn:</strong> Flask Web Gateway giới hạn cứng <code class="mono">MAX_CONTENT_LENGTH = 10MB</code> (trả về HTTP 413). Hàm <code class="mono">sanitize_filename()</code> loại bỏ mọi ký tự điều hướng thư mục và lưu tệp dưới mã định danh cô lập <code class="mono">{UUID}.bin</code>.
+    </div>
+  </div>
+</div>
+{% endblock %}

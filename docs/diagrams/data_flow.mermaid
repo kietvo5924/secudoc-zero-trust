@@ -1,0 +1,34 @@
+sequenceDiagram
+    autonumber
+    actor User as Người Thẩm Định (Verifier)
+    participant Web as Cổng Web SecuDoc
+    participant VerifyEngine as Động Cơ Zero-Trust
+    participant Crypto as Động Cơ SHA-256 / RSA
+    participant DB as SQLite DB
+    participant KeyVault as Kho Khóa RSA Gốc
+
+    User->>Web: 1. Tải tệp lên cổng kiểm tra (Untrusted Input)
+    Web->>VerifyEngine: 2. Chuyển tiếp luồng byte dữ liệu
+    VerifyEngine->>Crypto: 3. Tính toán mã băm SHA-256 (64 hex)
+    Crypto-->>VerifyEngine: Trả về computed_hash
+    VerifyEngine->>DB: 4. Truy vấn hồ sơ tài liệu theo mã băm hoặc UUID
+    alt Không tìm thấy trong DB
+        DB-->>VerifyEngine: None
+        VerifyEngine-->>Web: Trả về trạng thái NOT_FOUND
+    else Tìm thấy tài liệu hợp lệ
+        DB-->>VerifyEngine: Trả về doc_record (hash, signature, status)
+        alt Trạng thái status == 'REVOKED'
+            VerifyEngine-->>Web: Trả về trạng thái REVOKED (Văn bản bị thu hồi)
+        else Trạng thái status == 'ACTIVE'
+            VerifyEngine->>KeyVault: Lấy Khóa Công Khai Gốc (Public Key)
+            VerifyEngine->>Crypto: verify_signature(computed_hash, stored_signature, public_key)
+            alt Chữ ký hợp lệ
+                Crypto-->>VerifyEngine: Valid = True
+                VerifyEngine-->>Web: Trạng thái VERIFIED_AUTHENTIC (100% Chính gốc)
+            else Chữ ký không khớp
+                Crypto-->>VerifyEngine: Valid = False
+                VerifyEngine-->>Web: Trạng thái INVALID_SIGNATURE (Giả mạo chữ ký)
+            end
+        end
+    end
+    Web-->>User: 5. Hiển thị báo cáo thẩm định chi tiết kèm giải thích

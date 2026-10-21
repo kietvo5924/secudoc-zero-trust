@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}SecuDoc - Bảng Điều Khiển Phát Hành (Issuer){% endblock %}
+
+{% block content %}
+<div class="card-header">
+  <div>
+    <h2>Bảng Điều Khiển Phát Hành Văn Bản Ký Số</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">
+      Tải lên văn bản, tính toán mã băm SHA-256 và ký số bảo mật bằng Khóa Riêng RSA-2048 của cơ quan cấp
+    </p>
+  </div>
+  <span class="user-badge" style="font-size: 0.9rem; padding: 0.4rem 1rem;">
+    Tài khoản: {{ current_user.full_name }}
+  </span>
+</div>
+
+<!-- Issue New Document Card -->
+<div class="glass-card">
+  <h3 style="margin-bottom: 1.25rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 0.5rem;">
+    <span>✍️</span> Phát Hành & Ký Số Văn Bản Mới
+  </h3>
+
+  <form action="{{ url_for('issue_document') }}" method="POST" enctype="multipart/form-data">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem;">
+      <div class="form-group">
+        <label class="form-label" for="docTitle">Tiêu đề văn bản *</label>
+        <input 
+          type="text" 
+          id="docTitle" 
+          name="title" 
+          class="form-control" 
+          placeholder="Ví dụ: Bằng Cử Nhân Khoa Học Máy Tính" 
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="recipientName">Họ và tên người nhận *</label>
+        <input 
+          type="text" 
+          id="recipientName" 
+          name="recipient_name" 
+          class="form-control" 
+          placeholder="Ví dụ: Nguyễn Văn An - MSSV: 20260001" 
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="docType">Loại văn bản *</label>
+        <select id="docType" name="doc_type" class="form-control" style="background: #080c16;">
+          <option value="DIPLOMA">Bằng Tốt Nghiệp / Cử Nhân (DIPLOMA)</option>
+          <option value="TRANSCRIPT">Bảng Điểm Học Tập (TRANSCRIPT)</option>
+          <option value="CERTIFICATE">Chứng Chỉ Năng Lực (CERTIFICATE)</option>
+          <option value="OFFICIAL_LETTER">Quyết Định / Công Văn (OFFICIAL_LETTER)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Chọn tệp văn bản gốc cần phát hành *</label>
+      <input type="file" name="document_file" class="form-control" required>
+      <small style="color: var(--text-dim); display: block; margin-top: 0.35rem;">
+        Hệ thống sẽ băm trực tiếp nội dung nhị phân của tệp này để tạo chữ ký số không thể chối bỏ.
+      </small>
+    </div>
+
+    <div style="text-align: right; margin-top: 1.5rem;">
+      <button type="submit" class="btn btn-primary">
+        🔏 Ký Số RSA-2048 & Đóng Block Sổ Cái
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- List of Issued Documents -->
+<div class="glass-card">
+  <div class="card-header">
+    <h3>Danh Sách Văn Bản Đã Ban Hành ({{ documents|length }})</h3>
+  </div>
+
+  {% if documents %}
+    <div class="table-responsive">
+      <table class="secu-table">
+        <thead>
+          <tr>
+            <th>Tiêu Đề</th>
+            <th>Người Nhận</th>
+            <th>Loại</th>
+            <th>Mã UUID</th>
+            <th>Mã Băm SHA-256</th>
+            <th>Trạng Thái</th>
+            <th>Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in documents %}
+          <tr>
+            <td>
+              <strong>{{ doc.title }}</strong><br>
+              <small style="color: var(--text-dim);">{{ doc.original_filename }} ({{ (doc.file_size / 1024)|round(1) }} KB)</small>
+            </td>
+            <td><strong style="color: var(--accent-green);">{{ doc.recipient_name }}</strong></td>
+            <td><span class="user-badge">{{ doc.doc_type }}</span></td>
+            <td>
+              <span class="hash-pill mono">{{ doc.doc_uuid[:8] }}... 
+                <button type="button" class="copy-btn" data-copy="{{ doc.doc_uuid }}" title="Sao chép UUID">📋</button>
+              </span>
+            </td>
+            <td>
+              <span class="hash-pill mono">{{ doc.doc_hash[:12] }}...
+                <button type="button" class="copy-btn" data-copy="{{ doc.doc_hash }}" title="Sao chép Hash">📋</button>
+              </span>
+            </td>
+            <td>
+              {% if doc.status == 'ACTIVE' %}
+                <span style="color: var(--accent-green); font-weight: 700;">● Có hiệu lực</span>
+              {% else %}
+                <span style="color: var(--accent-red); font-weight: 700;">● Đã thu hồi</span>
+              {% endif %}
+            </td>
+            <td style="white-space: nowrap;">
+              <a href="{{ url_for('view_certificate', doc_uuid=doc.doc_uuid) }}" target="_blank" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; text-decoration: none; display: inline-block; margin-right: 0.35rem;">
+                📜 Phiếu Số
+              </a>
+              {% if doc.status == 'ACTIVE' %}
+                <form action="{{ url_for('revoke_document', doc_uuid=doc.doc_uuid) }}" method="POST" style="display: inline-block;" onsubmit="return confirm('Bạn có chắc chắn muốn THU HỒI văn bản này không? Thao tác này sẽ đóng một block thu hồi vào sổ cái và không thể hoàn tác!');">
+                  <input type="hidden" name="reason" value="Thu hồi theo quyết định của Hội đồng Đào tạo">
+                  <button type="submit" class="btn btn-danger" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">
+                    Thu Hồi
+                  </button>
+                </form>
+              {% else %}
+                <small style="color: var(--text-dim); display: inline-block; vertical-align: middle;">Đã đóng sổ</small>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p style="color: var(--text-muted); text-align: center; padding: 2rem;">Chưa có văn bản nào được phát hành.</p>
+  {% endif %}
+</div>
+{% endblock %}

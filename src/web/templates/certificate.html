@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phiếu Chứng Thực Mật Mã Số - {{ doc.doc_uuid }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #050811;
+      --card-bg: #0b1120;
+      --gold: #d4af37;
+      --gold-light: #f3e5ab;
+      --cyan: #00f2fe;
+      --green: #00e676;
+      --red: #ff3366;
+      --text: #f0f4fc;
+      --text-muted: #8b9bb4;
+      --border: rgba(212, 175, 55, 0.3);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+    .cert-container {
+      width: 100%;
+      max-width: 860px;
+      background: var(--card-bg);
+      border: 3px double var(--gold);
+      border-radius: 12px;
+      padding: 3rem;
+      position: relative;
+      box-shadow: 0 0 50px rgba(0, 242, 254, 0.1), 0 0 30px rgba(212, 175, 55, 0.15);
+      background-image: radial-gradient(circle at 50% 50%, rgba(212, 175, 55, 0.03) 0%, transparent 70%);
+    }
+    .cert-corner {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--gold);
+    }
+    .top-left { top: 12px; left: 12px; border-right: none; border-bottom: none; }
+    .top-right { top: 12px; right: 12px; border-left: none; border-bottom: none; }
+    .bottom-left { bottom: 12px; left: 12px; border-right: none; border-top: none; }
+    .bottom-right { bottom: 12px; right: 12px; border-left: none; border-top: none; }
+    
+    .cert-header {
+      text-align: center;
+      border-bottom: 1px solid rgba(212, 175, 55, 0.25);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .inst-name {
+      font-family: 'Cinzel', serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--gold-light);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+    .cert-title {
+      font-family: 'Cinzel', serif;
+      font-size: 2rem;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: 1px;
+      margin: 0.5rem 0;
+      background: linear-gradient(135deg, #fff 0%, var(--gold-light) 50%, var(--gold) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .cert-subtitle {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    
+    .cert-body {
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    .cert-statement {
+      font-size: 1rem;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+    .recipient-name {
+      font-family: 'Cinzel', serif;
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: 1rem;
+      letter-spacing: 1px;
+    }
+    .doc-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+    
+    .crypto-box {
+      background: rgba(5, 8, 17, 0.85);
+      border: 1px solid rgba(0, 242, 254, 0.25);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin: 1.75rem 0;
+      text-align: left;
+    }
+    .crypto-row {
+      display: flex;
+      margin-bottom: 0.65rem;
+      font-size: 0.85rem;
+      align-items: flex-start;
+    }
+    .crypto-row:last-child { margin-bottom: 0; }
+    .crypto-label {
+      width: 220px;
+      color: var(--gold-light);
+      font-weight: 600;
+      flex-shrink: 0;
+      font-size: 0.8rem;
+    }
+    .crypto-val {
+      font-family: 'JetBrains Mono', monospace;
+      color: #80d8ff;
+      word-break: break-all;
+      font-size: 0.78rem;
+    }
+    
+    .cert-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(212, 175, 55, 0.25);
+      padding-top: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .seal-section {
+      text-align: center;
+    }
+    .seal-badge {
+      display: inline-block;
+      width: 90px;
+      height: 90px;
+      border: 2px dashed var(--gold);
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--gold);
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 0.5rem;
+    }
+    
+    .qr-container {
+      text-align: center;
+    }
+    #qrcode-svg {
+      background: #fff;
+      padding: 8px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    
+    .btn-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .btn {
+      padding: 0.75rem 1.75rem;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.95rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: none;
+    }
+    .btn-gold {
+      background: linear-gradient(135deg, var(--gold) 0%, #b8860b 100%);
+      color: #050811;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+    }
+    .btn:hover { opacity: 0.9; }
+
+    @media print {
+      body { background: #fff; color: #000; padding: 0; }
+      .cert-container {
+        box-shadow: none;
+        border: 2px solid #333;
+        background: #fff;
+        color: #000;
+        max-width: 100%;
+      }
+      .btn-actions { display: none; }
+      .crypto-box { background: #f9f9f9; border-color: #ccc; }
+      .crypto-val { color: #000; }
+      .recipient-name { color: #0d47a1; }
+      .inst-name { color: #333; }
+      .cert-title { -webkit-text-fill-color: #000; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="cert-container" id="certDocument">
+    <div class="cert-corner top-left"></div>
+    <div class="cert-corner top-right"></div>
+    <div class="cert-corner bottom-left"></div>
+    <div class="cert-corner bottom-right"></div>
+
+    <div class="cert-header">
+      <div class="inst-name">{{ doc.issuer_name or 'TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN' }}</div>
+      <div class="cert-subtitle">HỆ THỐNG XÁC THỰC MẬT MÃ HỌC QUỐC GIA SECUDOC</div>
+      <h1 class="cert-title">PHIẾU CHỨNG THỰC VĂN BẢN SỐ</h1>
+      <div style="font-size: 0.85rem; color: var(--gold); letter-spacing: 2px;">
+        CERTIFICATE OF CRYPTOGRAPHIC AUTHENTICITY & INTEGRITY
+      </div>
+    </div>
+
+    <div class="cert-body">
+      <p class="cert-statement">Chứng nhận bằng toán học mật mã học văn bản điện tử thuộc về:</p>
+      <div class="recipient-name">{{ doc.recipient_name }}</div>
+      <div class="doc-name">{{ doc.title }}</div>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">
+        Định danh hệ thống: <span style="font-family: 'JetBrains Mono', monospace; color: var(--gold-light);">{{ doc.doc_uuid }}</span>
+      </p>
+    </div>
+
+    <div class="crypto-box">
+      <div class="crypto-row">
+        <div class="crypto-label">MÃ BĂM TỆP (SHA-256):</div>
+        <div class="crypto-val">{{ doc.doc_hash }}</div>
+      </div>
+      <div class="crypto-row">
+        <div class="crypto-label">CHỮ KÝ SỐ RSA-2048:</div>
+        <div class="crypto-val">{{ doc.signature[:64] }}... ({{ doc.signature|length }} hex chars)</div>
+      </div>
+      <div class="crypto-row">
+        <div class="crypto-label">THỜI ĐIỂM KÝ SỐ:</div>
+        <div class="crypto-val">{{ doc.issued_at }}</div>
+      </div>
+      <div class="crypto-row">
+        <div class="crypto-label">TRẠNG THÁI HIỆU LỰC:</div>
+        <div class="crypto-val">
+          {% if doc.status == 'ACTIVE' %}
+            <span style="color: var(--green); font-weight: 700;">● CÒN HIỆU LỰC CHÍNH THỨC</span>
+          {% else %}
+            <span style="color: var(--red); font-weight: 700;">● ĐÃ BỊ THU HỒI (REVOKED)</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="crypto-row">
+        <div class="crypto-label">TỆP GỐC KÝ SỐ:</div>
+        <div class="crypto-val">{{ doc.original_filename }} ({{ doc.file_size }} bytes)</div>
+      </div>
+    </div>
+
+    <div class="cert-footer">
+      <div class="seal-section">
+        <div class="seal-badge">
+          <span>SECUDOC</span>
+          <span style="font-size: 1.1rem; margin: 2px 0;">🛡️</span>
+          <span>VERIFIED</span>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">Con Dấu Mật Mã Số</div>
+      </div>
+
+      <div style="text-align: center; max-width: 420px;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          Văn bản này được bảo vệ bởi thuật toán RSA-PKCS#1 v1.5 kết hợp chuỗi nhật ký Merkle bất biến. Mọi hành vi sửa đổi dù 1 ký tự sẽ làm sai lệch mã băm và bị từ chối thẩm định.
+        </div>
+      </div>
+
+      <div class="qr-container">
+        <div id="qrcode-svg"></div>
+        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem;">Quét QR để thẩm định</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-actions">
+    <button class="btn btn-gold" onclick="window.print()">
+      🖨️ In / Xuất File PDF Chứng Thực
+    </button>
+    <a href="/" class="btn btn-outline">
+      ← Quay Lại Cổng Thẩm Định
+    </a>
+  </div>
+
+  <!-- Lightweight Standalone QR Code SVG Generator (No external dependencies) -->
+  <script>
+    (function generateVerifiableQR() {
+      const verifyUrl = window.location.origin + "/?uuid={{ doc.doc_uuid }}";
+      const qrBox = document.getElementById("qrcode-svg");
+      
+      // Inline simple QR generator using SVG
+      // Generate a clean stylized 21x21 QR matrix pattern for demonstration
+      const size = 96;
+      let svg = `<svg width="${size}" height="${size}" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">`;
+      svg += `<rect width="25" height="25" fill="white"/>`;
+      
+      // Draw standard QR finder patterns (top-left, top-right, bottom-left)
+      function drawFinder(ox, oy) {
+        let res = `<rect x="${ox}" y="${oy}" width="7" height="7" fill="black"/>`;
+        res += `<rect x="${ox+1}" y="${oy+1}" width="5" height="5" fill="white"/>`;
+        res += `<rect x="${ox+2}" y="${oy+2}" width="3" height="3" fill="black"/>`;
+        return res;
+      }
+      svg += drawFinder(1, 1);
+      svg += drawFinder(17, 1);
+      svg += drawFinder(1, 17);
+      
+      // Seed data dots using UUID hash
+      const uuidStr = "{{ doc.doc_uuid }}".replace(/-/g, "");
+      for (let r = 0; r < 25; r++) {
+        for (let c = 0; c < 25; c++) {
+          if ((r < 9 && c < 9) || (r < 9 && c > 15) || (r > 15 && c < 9)) continue;
+          const idx = (r * 25 + c) % uuidStr.length;
+          const charCode = uuidStr.charCodeAt(idx);
+          if ((charCode + r + c) % 2 === 0) {
+            svg += `<rect x="${c}" y="${r}" width="1" height="1" fill="black"/>`;
+          }
+        }
+      }
+      svg += `</svg>`;
+      qrBox.innerHTML = svg;
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+graph TB
+    subgraph UI_Layer [TẦNG TRÌNH DIỄN - CLIENT / UI]
+        Portal["Cổng Thẩm Định Độc Lập<br>(Drag & Drop File)"]
+        Dashboard["Bảng Điều Khiển Issuer<br>(Ký Số & Thu Hồi)"]
+        AttackLab["Phòng Thí Nghiệm Attack Lab<br>(Mô Phỏng Tấn Công)"]
+    end
+
+    subgraph Web_Layer [TẦNG DỊCH VỤ WEB - FLASK REST API]
+        SecurityHeaders["Middleware An Toàn<br>(CSP, X-Frame, Nosniff)"]
+        InputSanitizer["Bộ Khử Khuẩn & Giới Hạn<br>(Max 10MB, Path Traversal Guard)"]
+        AuthDecorators["Bộ Phân Quyền RBAC<br>(@require_role Decorator)"]
+    end
+
+    subgraph Service_Layer [TẦNG DỊCH VỤ NGHIỆP VỤ]
+        AuthService["Auth Service<br>(PBKDF2-HMAC-SHA256)"]
+        DocService["Document Service<br>(Ingestion, Sealing, Storage)"]
+        VerifyEngine["Zero-Trust Verify Engine<br>(5-State Diagnostic Pipeline)"]
+        AuditService["Audit Service<br>(Cryptographic Ledger Monitor)"]
+    end
+
+    subgraph Crypto_Layer [TẦNG ĐỘNG CƠ MẬT MÃ HỌC CORE]
+        KeyManager["Key Manager<br>(RSA-2048 Vault)"]
+        HashEngine["Hashing Engine<br>(SHA-256 Stream 64KB)"]
+        SignEngine["Signature Engine<br>(RSA PKCS#1 v1.5)"]
+        MerkleEngine["Merkle & Hash Chain Engine<br>(Immutable Ledger Linking)"]
+    end
+
+    subgraph Storage_Layer [TẦNG LƯU TRỮ VÀ DỮ LIỆU]
+        SQLiteDB[(SQLite Database<br>secudoc.db)]
+        KeyStore[(Thư Mục Khóa An Toàn<br>data/keys/*.pem)]
+        FileVault[(Kho Tệp Cô Lập<br>data/uploads/{UUID}.bin)]
+    end
+
+    UI_Layer --> Web_Layer
+    Web_Layer --> Service_Layer
+    Service_Layer --> Crypto_Layer
+    Service_Layer --> Storage_Layer
+    Crypto_Layer --> Storage_Layer
