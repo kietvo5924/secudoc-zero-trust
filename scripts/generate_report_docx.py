@@ -427,18 +427,28 @@ def create_final_report():
     add_bullet("Kẻ gian nội bộ can thiệp sửa trực tiếp ô dữ liệu trong SQLite -> Kết quả: Sổ cái kiểm toán báo đứt gãy liên kết tại chính xác block bị sửa; hỗ trợ tính năng Khôi phục tự lành (Self-Healing Revert).", "Kịch bản 4 (Sửa lén cơ sở dữ liệu & Tự lành): ")
     add_bullet("Tải tệp có tên chứa ký tự ../../../../evil.dll -> Kết quả: Bộ lọc khử khuẩn an toàn và lưu trữ cô lập, triệt tiêu nguy cơ Path Traversal.", "Kịch bản 5 (Path Traversal Guard): ")
 
+    add_heading2("6.2. Kịch Bản Ứng Phó Khi Tài Khoản Bị Chiếm Quyền (Compromised Account Protocol)")
+    add_body(
+        "Nhằm giải quyết triệt để yêu cầu an ninh khi tài khoản cơ quan phát hành (Issuer) bị lộ mật khẩu hoặc chiếm đoạt phiên làm việc, "
+        "SecuDoc thiết lập quy trình phản ứng sự cố 4 lớp (Defense-in-Depth): "
+        "(1) Tự động khóa tài khoản sau 5 lần nhập sai; "
+        "(2) Tính bất biến của sổ cái bảo toàn nguyên vẹn lịch sử (kẻ tấn công không thể xóa/sửa các block đã cấp); "
+        "(3) Tính năng Thu hồi khẩn cấp hàng loạt (Emergency Batch Revocation - emergency_batch_revoke) cho phép Auditor hủy bỏ toàn bộ văn bằng cấp trái phép; "
+        "(4) Kiến trúc sẵn sàng hỗ trợ kiểm soát kép (Dual-Approval / Maker-Checker)."
+    )
+
     # -------------------------------------------------------------
     # CHƯƠNG 10: TEST RESULTS
     # -------------------------------------------------------------
-    add_heading1("7. KẾT QUẢ KIỂM THỬ THỰC TẾ (27/27 TEST CASES PASS)")
+    add_heading1("7. KẾT QUẢ KIỂM THỬ THỰC TẾ (46/46 TEST CASES PASS)")
     add_body(
         "Toàn bộ hệ thống được kiểm thử tự động bằng Python Standard Unittest thông qua lệnh: "
         "'python -m unittest discover -s tests -p \"test_*.py\" -v'. "
-        "Thời gian thực thi toàn bộ 27 bài kiểm tra là 4.08 giây trên hệ điều hành Windows, với tỷ lệ thành công tuyệt đối 100% (27/27 PASS).",
+        "Thời gian thực thi toàn bộ 46 bài kiểm tra là ~8.9 giây trên hệ điều hành Windows, với tỷ lệ thành công tuyệt đối 100% (46/46 PASS, 0 Failures, 0 Errors).",
         bold_prefix="Tổng quan thực nghiệm: "
     )
 
-    tbl_tc = doc.add_table(rows=13, cols=4)
+    tbl_tc = doc.add_table(rows=14, cols=4)
     tbl_tc.alignment = WD_TABLE_ALIGNMENT.CENTER
     tc_heads = ["Mã Test Case", "Nhóm Kiểm Thử", "Mục Tiêu & Kịch Bản", "Kết Quả"]
     for i, h in enumerate(tc_heads):
@@ -457,6 +467,7 @@ def create_final_report():
         ("TC-CRYPTO-09", "Crypto", "Tính mảng 256 vector nhị phân phục vụ Avalanche Heatmap", "PASS (Khớp Hamming distance)"),
         ("TC-AUTH-01", "Auth", "Băm mật khẩu an toàn PBKDF2 (100k rounds, 16B salt)", "PASS (Bảo mật tối đa)"),
         ("TC-DOC-01", "Document", "Khử khuẩn tên tệp chống Path Traversal (../../passwd)", "PASS (Lọc sạch an toàn)"),
+        ("TC-DOC-05", "Incident", "Thu hồi khẩn cấp hàng loạt khi tài khoản Issuer bị chiếm quyền", "PASS (Batch Revoked 100%)"),
         ("TC-VERIFY-01", "Verify", "Thẩm định tệp nguyên gốc (Happy Path)", "PASS (VERIFIED_AUTHENTIC)"),
         ("TC-VERIFY-02", "Verify", "Phát hiện tệp bị sửa 1 ký tự điểm GPA", "PASS (TAMPERED_CONTENT)"),
         ("TC-VERIFY-03", "Verify", "Phát hiện văn bản đã bị thu hồi trong hệ thống", "PASS (REVOKED status)"),
@@ -478,27 +489,25 @@ def create_final_report():
     # -------------------------------------------------------------
     # CHƯƠNG 11: TRADE-OFFS & CONCLUSION
     # -------------------------------------------------------------
-    add_heading1("8. PHÂN TÍCH ĐÁNH ĐỔI BẮT BUỘC (TRADE-OFF ANALYSIS)")
+    add_heading1("8. PHÂN TÍCH ĐÁNH ĐỔI BẮT BUỘC (TRADE-OFF ANALYSIS: NGẮN HẠN VS DÀI HẠN)")
     add_body(
-        "Theo yêu cầu bắt buộc của đề bài học phần, nhóm phân tích sâu sắc 3 đánh đổi cốt lõi giữa an toàn, riêng tư, tiện lợi và chi phí:",
+        "Theo yêu cầu bắt buộc của đề bài học phần, nhóm phân tích sâu sắc 3 đánh đổi cốt lõi giữa an toàn, riêng tư, tiện lợi và chi phí xét cả ngắn hạn và dài hạn:",
         bold_prefix="Đánh đổi kỹ thuật: "
     )
     add_bullet(
-        "Hệ thống thẩm định dựa trên mã băm SHA-256 độc lập. Khi tải tệp lên cổng kiểm tra, máy chủ chỉ tính băm trong bộ nhớ tạm rồi hủy "
-        "ngay lập tức, tuyệt đối không lưu trữ nội dung tệp của bên thứ ba. Điều này giúp hệ thống tuân thủ 100% luật bảo vệ dữ liệu cá nhân "
-        "(GDPR và Nghị định 13/2023/NĐ-CP), loại bỏ hoàn toàn nguy cơ rò rỉ dữ liệu diện rộng.",
-        "1. Đánh đổi Toàn vẹn vs Quyền riêng tư (Privacy-Preserving Hash Verification): "
+        "Ngắn hạn: Máy chủ chỉ tính mã băm trong RAM rồi hủy ngay tệp tải lên, tuân thủ 100% GDPR và Nghị định 13/2023/NĐ-CP. "
+        "Dài hạn: Mở rộng tính năng tính toán băm trực tiếp trên trình duyệt bằng Web Crypto API, không truyền 1 byte tài liệu cá nhân qua mạng, triệt tiêu mọi trách nhiệm pháp lý khi rò rỉ dữ liệu.",
+        "1. Đánh đổi Toàn vẹn vs Quyền riêng tư (Ngắn hạn & Dài hạn): "
     )
     add_bullet(
-        "SHA-256 có tính chất nhạy cảm cực cao tới từng bit nhị phân. Nếu tệp bị phần mềm di động thêm vài byte metadata cuối file, hệ thống "
-        "sẽ từ chối ngay. Nhóm quyết định giữ nguyên tắc 'Security First' để ngăn chặn các tệp chứa mã độc polyglot; đồng thời tối ưu trải nghiệm "
-        "bằng cách hiển thị thông tin đối soát trực quan.",
+        "Ngắn hạn: Kiên quyết từ chối mọi tệp sai lệch dù chỉ 1 byte nhị phân để ngăn chặn mã độc polyglot và gian lận tinh vi. "
+        "Dài hạn: Để tránh gây bất tiện cho người dùng khi phần mềm PDF vô tình thêm metadata ngày mở, hướng đi dài hạn là áp dụng chuẩn chữ ký số nhúng PAdES để bảo vệ vùng nội dung cốt lõi.",
         "2. Đánh đổi Khắt khe Nhị phân vs Tiện lợi Người dùng: "
     )
     add_bullet(
-        "Thay vì sử dụng mạng Blockchain công khai (tốn phí gas, độ trễ giao dịch cao, phụ thuộc internet), SecuDoc xây dựng Sổ cái băm cục bộ "
-        "(Cryptographic Hash-Chain Ledger). Giải pháp này mang lại chi phí vận hành bằng 0 đồng, tốc độ <10ms và tính độc lập hoàn toàn trong mạng nội bộ đại học.",
-        "3. Đánh đổi Sổ cái Cục bộ vs Blockchain Công khai: "
+        "Ngắn hạn: Sổ cái băm cục bộ SQLite Hash-Chain đem lại chi phí vận hành 0 đồng, tốc độ đối soát <10ms, độc lập 100% offline. "
+        "Dài hạn: Nhược điểm là rủi ro Single Point of Failure nếu máy chủ trường bị phá hủy vật lý; do đó giải pháp dài hạn là mở rộng sang Consortium Blockchain liên trường để phân tán quyền kiểm chứng.",
+        "3. Đánh đổi Sổ cái Cục bộ vs Blockchain Phân tán: "
     )
 
     add_heading1("9. TỔNG KẾT VÀ TÀI LIỆU THAM KHẢO")

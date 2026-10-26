@@ -15,7 +15,7 @@ Hệ thống giải quyết triệt để vấn nạn làm giả bảng điểm,
 2. **Chữ ký số bất đối xứng RSA-2048 PKCS#1 v1.5:** Sử dụng Khóa riêng của Trường Đại học để ký số lên mã băm; bảo đảm tính xác thực nguồn gốc và chống chối bỏ (Non-repudiation).
 3. **Sổ cái băm mật mã liên hoàn (Merkle / Hash-Chain Ledger):** Liên kết lịch sử phát hành và thu hồi chứng chỉ qua chuỗi $H_i = \text{SHA256}(i \,||\, H_{i-1} \,||\, \text{Timestamp} \,||\, \text{Action} \,||\, \text{UUID} \,||\, \text{PayloadHash})$, ngăn chặn mọi hành vi can thiệp lén cơ sở dữ liệu nội bộ.
 
-Hệ thống được lập trình hoàn chỉnh bằng Python 3, Flask, Cryptography, SQLite và giao diện Web hiện đại (Cybersecurity Dark Theme), đạt tỷ lệ **100% PASS trên toàn bộ 25 bài kiểm thử tự động**, tích hợp sẵn phòng thí nghiệm mô phỏng tấn công (Attack Lab) và công cụ dòng lệnh (CLI Utility).
+Hệ thống được lập trình hoàn chỉnh bằng Python 3, Flask, Cryptography, SQLite và giao diện Web hiện đại (Cybersecurity Dark Theme), đạt tỷ lệ **100% PASS trên toàn bộ 46 bài kiểm thử tự động**, tích hợp sẵn phòng thí nghiệm mô phỏng tấn công (Attack Lab) và công cụ dòng lệnh (CLI Utility).
 
 ---
 
@@ -44,6 +44,13 @@ Hệ thống xác định 5 nhóm mối đe dọa trọng tâm:
 - **THR-07 (Tampering DB):** Kẻ gian nội bộ sửa trực tiếp ô dữ liệu trong SQLite -> *Phòng thủ:* Sổ cái băm Merkle phát hiện đứt gãy chuỗi ngay tại block bị sửa.
 - **THR-08 (Injection / Path Traversal):** Tải file có tên `../../evil.dll` -> *Phòng thủ:* Hàm `sanitize_filename()` bóc tách an toàn và lưu trữ dưới dạng cô lập `{UUID}.bin`.
 
+### 3.1. Kịch Bản Ứng Phó Khi Tài Khoản Bị Chiếm Quyền (Compromised Account Protocol)
+Để trả lời câu hỏi cốt lõi của đề tài: *"Nếu tài khoản bị chiếm quyền thì hệ thống xử lý như thế nào?"*, SecuDoc thiết lập quy trình phản ứng sự cố 4 lớp (Defense-in-Depth Incident Response):
+1. **Khóa tài khoản tự động (Account Lockout):** Cơ chế Rate Limiting phát hiện dò quét mật khẩu và khóa tài khoản tức thì sau 5 lần thất bại liên tiếp trong 300 giây.
+2. **Bảo toàn bằng chứng bất biến (Immutable Audit Trail):** Kể cả khi kẻ tấn công có được mật khẩu Issuer để cấp bằng khống, kẻ đó **hoàn toàn không thể xóa dấu vết hoặc sửa đổi các khối đã cấp trước đó** nhờ cấu trúc chuỗi khối liên kết toán học SHA-256 (`prev_block_hash`). Mọi hành vi trái phép đều bị ghi nhận vĩnh viễn trên sổ cái.
+3. **Lệnh thu hồi khẩn cấp hàng loạt (`emergency_batch_revoke`):** Quản trị viên/Auditor có thể kích hoạt lệnh thu hồi toàn bộ các văn bằng được phát hành trong khoảng thời gian tài khoản Issuer bị chiếm quyền. Mỗi lệnh thu hồi tạo một khối `REVOKE` mới đóng dấu vào sổ cái, khiến cổng thẩm định Zero-Trust lập tức chuyển trạng thái sang `REVOKED`.
+4. **Định hướng kiểm soát kép (Dual-Approval / Maker-Checker):** Kiến trúc sẵn sàng tích hợp quy trình phê duyệt 2 bước: Một tài khoản tạo văn bản (Maker) và một lãnh đạo ký duyệt (Checker) thì văn bằng mới được ký số và vào sổ cái.
+
 ---
 
 ## 4. KIẾN TRÚC HỆ THỐNG VÀ LUỒNG DỮ LIỆU
@@ -66,21 +73,27 @@ Phòng thí nghiệm tích hợp sẵn trên giao diện web chứng minh thực
 
 ---
 
-## 6. KẾT QUẢ KIỂM THỬ THỰC TẾ (25/25 PASS)
-Toàn bộ 25 bài kiểm thử tự động đã thực thi thành công 100% trên môi trường Windows thông qua lệnh:
+## 6. KẾT QUẢ KIỂM THỬ THỰC TẾ (46/46 PASS 100%)
+Toàn bộ 46 bài kiểm thử tự động đã thực thi thành công 100% trên môi trường Windows thông qua lệnh:
 ```powershell
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
-- **Thời gian chạy:** 3.88 giây.
-- **Tỷ lệ:** 25/25 Test Cases PASS (0 Failures, 0 Errors).
+- **Thời gian chạy:** ~8.9 giây.
+- **Tỷ lệ:** 46/46 Test Cases PASS (0 Failures, 0 Errors, 100% Passed).
 - **Chi tiết kết quả:** Được ghi nhận đầy đủ trong `docs/TEST_RESULTS.md`.
 
 ---
 
-## 7. PHÂN TÍCH ĐÁNH ĐỔI BẮT BUỘC (TRADE-OFF ANALYSIS)
-1. **Đánh đổi Toàn vẹn vs Quyền riêng tư:** Thẩm định dựa trên mã băm độc lập, không lưu trữ tệp của người thẩm định vào cơ sở dữ liệu -> Tuân thủ 100% luật bảo vệ dữ liệu cá nhân (GDPR và Nghị định 13/2023/NĐ-CP).
-2. **Đánh đổi Khắt khe Nhị phân vs Tiện lợi Người dùng:** Kiên quyết từ chối mọi tệp sai lệch 1 byte để ngăn chặn mã độc polyglot và gian lận tinh vi.
-3. **Đánh đổi Sổ cái Cục bộ vs Blockchain Công khai:** Tốc độ phản hồi tức thì (<10ms), chi phí vận hành bằng 0 đồng, hoàn toàn độc lập và không phụ thuộc kết nối Internet ngoài.
+## 7. PHÂN TÍCH ĐÁNH ĐỔI BẮT BUỘC (TRADE-OFF ANALYSIS: NGẮN HẠN VS DÀI HẠN)
+1. **Đánh đổi Toàn vẹn vs Quyền riêng tư (Privacy vs Integrity):**
+   - *Ngắn hạn:* Thẩm định dựa trên mã băm độc lập, không lưu trữ tệp của người thẩm định vào cơ sở dữ liệu -> Tuân thủ 100% luật bảo vệ dữ liệu cá nhân (GDPR và Nghị định 13/2023/NĐ-CP).
+   - *Dài hạn:* Hỗ trợ Web Crypto API băm tại trình duyệt client, máy chủ không bao giờ nhìn thấy nội dung file thô, giảm thiểu tối đa trách nhiệm pháp lý khi lưu trữ PII.
+2. **Đánh đổi Khắt khe Nhị phân vs Tiện lợi Người dùng (Strictness vs Usability):**
+   - *Ngắn hạn:* Kiên quyết từ chối mọi tệp sai lệch 1 byte để ngăn chặn mã độc polyglot và gian lận tinh vi.
+   - *Dài hạn:* Đánh đổi này có thể gây bất tiện nếu phần mềm PDF của người dùng tự động cập nhật metadata ngày mở. Hướng mở rộng dài hạn là áp dụng chuẩn chữ ký số nhúng **PAdES (PDF Advanced Electronic Signatures)** để bảo vệ trường nội dung độc lập với metadata vô hại.
+3. **Đánh đổi Sổ cái Cục bộ vs Blockchain Công khai (Local Hash-Chain vs Public/Consortium Blockchain):**
+   - *Ngắn hạn:* Sổ cái băm nội bộ (SQLite Hash-Chain) đem lại chi phí vận hành bằng 0 đồng, tốc độ <10ms và tính độc lập hoàn toàn trong mạng nội bộ đại học, không tốn phí gas.
+   - *Dài hạn:* Chấp nhận rủi ro Single Point of Failure nếu máy chủ trường bị phá hủy vật lý. Trong dài hạn, cần mở rộng sang mạng lưới **Consortium Blockchain liên trường** để phân tán quyền kiểm chứng mà vẫn giữ vững chi phí thấp.
 
 ---
 

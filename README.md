@@ -76,12 +76,12 @@ Hệ thống hỗ trợ 2 chế độ cấu hình qua file `.env` (tham khảo `
 
 ## 4. CHẠY BỘ KIỂM THỬ TỰ ĐỘNG (AUTOMATED TEST SUITE)
 
-Toàn bộ logic nghiệp vụ, các nguyên thủy mật mã học, các biện pháp an ninh web và các kịch bản phòng thủ được kiểm chứng bằng **45 test cases tự động**:
+Toàn bộ logic nghiệp vụ, các nguyên thủy mật mã học, các biện pháp an ninh web và các kịch bản phòng thủ được kiểm chứng bằng **46 test cases tự động**:
 ```powershell
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 **Kết quả thực nghiệm mới nhất:**
-- **45 / 45 Test Cases PASS 100%** (Thời gian chạy: ~12.3 giây, 0 cảnh báo ResourceWarning).
+- **46 / 46 Test Cases PASS 100%** (Thời gian chạy: ~8.9 giây, 0 cảnh báo ResourceWarning).
 - Xem báo cáo chi tiết từng test case tại [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md).
 - Xem báo cáo kiểm toán an ninh ứng dụng tại [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
 

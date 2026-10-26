@@ -246,3 +246,30 @@ class DocumentService:
                 """, (limit,))
             return [dict(r) for r in cursor.fetchall()]
 
+    def emergency_batch_revoke(self, issuer_id: int, reason: str, revoked_by: int) -> list[str]:
+        """
+        Emergency Incident Response:
+        When an issuer account is compromised, batch-revoke all active documents issued by this account
+        and cryptographically seal each revocation into the immutable audit hash-chain.
+        Returns the list of revoked document UUIDs.
+        """
+        with self.db.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT doc_uuid FROM documents WHERE issuer_id = ? AND status = 'ACTIVE';",
+                (issuer_id,)
+            )
+            rows = cursor.fetchall()
+            target_uuids = [r["doc_uuid"] for r in rows]
+
+        revoked_uuids = []
+        for doc_uuid in target_uuids:
+            self.revoke_document(
+                doc_uuid=doc_uuid,
+                reason=f"[SỰ CỐ AN NINH / TÀI KHOẢN BỊ XÂM PHẠM] {reason}",
+                revoked_by=revoked_by
+            )
+            revoked_uuids.append(doc_uuid)
+        return revoked_uuids
+
+

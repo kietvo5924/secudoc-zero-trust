@@ -105,7 +105,42 @@ class TestDocumentService(unittest.TestCase):
             block = cursor.fetchone()
             self.assertIsNotNone(block)
 
+    def test_emergency_batch_revoke_when_issuer_compromised(self):
+        """TC-DOC-05: Incident Response - Batch revoke active documents when issuer account is compromised."""
+        doc1 = self.doc_svc.issue_document(
+            issuer_id=1,
+            title="Bằng Cử Nhân 1",
+            recipient_name="Sinh Viên A",
+            doc_type="DIPLOMA",
+            file_bytes=b"Diploma 1",
+            original_filename="d1.txt"
+        )
+        doc2 = self.doc_svc.issue_document(
+            issuer_id=1,
+            title="Bằng Cử Nhân 2",
+            recipient_name="Sinh Viên B",
+            doc_type="DIPLOMA",
+            file_bytes=b"Diploma 2",
+            original_filename="d2.txt"
+        )
+
+        revoked_uuids = self.doc_svc.emergency_batch_revoke(
+            issuer_id=1,
+            reason="Tài khoản Issuer bị rò rỉ thông tin đăng nhập trong sự cố an ninh",
+            revoked_by=1
+        )
+
+        self.assertIn(doc1["doc_uuid"], revoked_uuids)
+        self.assertIn(doc2["doc_uuid"], revoked_uuids)
+
+        # Confirm all are now REVOKED in database
+        check1 = self.doc_svc.get_document_by_uuid(doc1["doc_uuid"])
+        check2 = self.doc_svc.get_document_by_uuid(doc2["doc_uuid"])
+        self.assertEqual(check1["status"], "REVOKED")
+        self.assertEqual(check2["status"], "REVOKED")
+        self.assertIn("TÀI KHOẢN BỊ XÂM PHẠM", check1["revocation_reason"])
 
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -14,6 +14,7 @@ if hasattr(sys.stderr, "reconfigure"):
 from src.models.database import DatabaseManager, get_db
 from src.crypto.keys import KeyManager
 from src.services.doc_service import DocumentService
+from src.config import DATABASE_PATH
 
 
 def seed_sample_environment():
@@ -31,8 +32,115 @@ def seed_sample_environment():
     if not existing:
         print("[*] Đang phát hành văn bản mẫu...")
 
-        # Sample Doc 1: Bang Tot Nghiep
-        doc1_content = (
+        # 1. FORMAT PDF: Bằng Tốt Nghiệp Cử Nhân (Nguyễn Văn An)
+        from src.utils.sample_generator import (
+            generate_pdf_bytes,
+            generate_docx_bytes,
+            generate_certificate_png_bytes,
+            generate_student_card_jpg_bytes
+        )
+
+        pdf_bytes = generate_pdf_bytes(
+            title="Bằng Cử Nhân An Toàn Thông Tin",
+            recipient="Nguyễn Văn An",
+            details=[
+                "Nganh dao tao: AN TOAN THONG TIN VA HE THONG",
+                "Xep loai tot nghiep: XUAT SAC",
+                "Diem trung binh tich luy (GPA): 3.92 / 4.0",
+                "Hieu truong: DA KY SO RSA-2048 VA DONG BLOCK SO CAI"
+            ]
+        )
+        doc_pdf = doc_svc.issue_document(
+            issuer_id=1,
+            title="Bằng Cử Nhân An Toàn Thông Tin (PDF) - Nguyễn Văn An",
+            recipient_name="Nguyễn Văn An",
+            doc_type="DIPLOMA",
+            file_bytes=pdf_bytes,
+            original_filename="Bang_Tot_Nghiep_Nguyen_Van_An.pdf"
+        )
+        print(f"[+] [PDF] Đã phát hành: {doc_pdf['title']} (UUID: {doc_pdf['doc_uuid']})")
+
+        # 2. FORMAT DOCX: Bảng Điểm Toàn Khóa (Trần Thị Bích)
+        docx_bytes = generate_docx_bytes(
+            title="BẢNG ĐIỂM HỌC TẬP TOÀN KHÓA CHÍNH QUY",
+            recipient="Trần Thị Bích",
+            mssv="20260042",
+            courses=[
+                ("Bảo Mật Mạng Máy Tính & Hệ Thống", "4", "10.0"),
+                ("Mật Mã Học Cơ Sở & Ứng Dụng", "3", "9.5"),
+                ("Lập Trình An Toàn & Phân Tích Mã Độc", "4", "9.8"),
+                ("Kiến Trúc Zero-Trust & Quản Lý Định Danh", "3", "9.8")
+            ],
+            gpa_str="3.88 / 4.0 (9.77 / 10.0)"
+        )
+        doc_docx = doc_svc.issue_document(
+            issuer_id=1,
+            title="Bảng Điểm Toàn Khóa (DOCX) - Trần Thị Bích",
+            recipient_name="Trần Thị Bích",
+            doc_type="TRANSCRIPT",
+            file_bytes=docx_bytes,
+            original_filename="Bang_Diem_Tran_Thi_Bich.docx"
+        )
+        print(f"[+] [DOCX] Đã phát hành: {doc_docx['title']} (UUID: {doc_docx['doc_uuid']})")
+
+        # 3. FORMAT PNG: Giấy Khen Sinh Viên Xuất Sắc (Trần Thị Bích)
+        png_bytes = generate_certificate_png_bytes(
+            title="GIAY KHEN SINH VIEN XUAT SAC",
+            recipient="Trần Thị Bích",
+            reason="Dat thanh tich thu khoa Khoa Bao mat Mang nam hoc 2025-2026",
+            is_revoked=False
+        )
+        doc_png = doc_svc.issue_document(
+            issuer_id=1,
+            title="Giấy Khen Sinh Viên Xuất Sắc (PNG) - Trần Thị Bích",
+            recipient_name="Trần Thị Bích",
+            doc_type="CERTIFICATE",
+            file_bytes=png_bytes,
+            original_filename="Giay_Khen_Sinh_Vien_Xuat_Sac.png"
+        )
+        print(f"[+] [PNG] Đã phát hành: {doc_png['title']} (UUID: {doc_png['doc_uuid']})")
+
+        # 4. FORMAT PNG REVOKED: Chứng Nhận Kỹ Thuật Viên (Lê Hoàng Phúc - Thu hồi)
+        png_revoked_bytes = generate_certificate_png_bytes(
+            title="CHUNG NHAN HOAN THANH KHOA HOC",
+            recipient="Lê Hoàng Phúc",
+            reason="Khoa hoc An ninh mang can ban (Vi pham quy che - Da bi thu hoi)",
+            is_revoked=True
+        )
+        doc_png_revoked = doc_svc.issue_document(
+            issuer_id=1,
+            title="Chứng Nhận Kỹ Thuật Viên (PNG - Đã Thu Hồi) - Lê Hoàng Phúc",
+            recipient_name="Lê Hoàng Phúc",
+            doc_type="CERTIFICATE",
+            file_bytes=png_revoked_bytes,
+            original_filename="Chung_Nhan_Ky_Thuat_Vien_Phuc.png"
+        )
+        doc_svc.revoke_document(
+            doc_uuid=doc_png_revoked["doc_uuid"],
+            revoked_by=1,
+            reason="Thu hồi chứng nhận do học viên vi phạm quy chế thi cử và làm sai lệch hồ sơ đầu vào"
+        )
+        print(f"[+] [PNG] Đã phát hành & THU HỒI: {doc_png_revoked['title']} (UUID: {doc_png_revoked['doc_uuid']})")
+
+        # 5. FORMAT JPG: Thẻ Sinh Viên Xác Thực Số (Lê Hoàng Phúc)
+        jpg_bytes = generate_student_card_jpg_bytes(
+            recipient="Lê Hoàng Phúc",
+            mssv="20260088",
+            dept="Khoa An Toàn Thông Tin",
+            valid_until="31/12/2028"
+        )
+        doc_jpg = doc_svc.issue_document(
+            issuer_id=1,
+            title="Thẻ Sinh Viên Điện Tử (JPG) - Lê Hoàng Phúc",
+            recipient_name="Lê Hoàng Phúc",
+            doc_type="OFFICIAL_LETTER",
+            file_bytes=jpg_bytes,
+            original_filename="The_Sinh_Vien_Le_Hoang_Phuc.jpg"
+        )
+        print(f"[+] [JPG] Đã phát hành: {doc_jpg['title']} (UUID: {doc_jpg['doc_uuid']})")
+
+        # 6. FORMAT TXT: Bằng Tốt Nghiệp Văn Bản (Nguyễn Văn An)
+        doc_txt_content = (
             "TRUONG DAI HOC CONG NGHE THONG TIN - KHOA AN TOAN THONG TIN\n"
             "===========================================================\n"
             "BANG TOT NGHIEP DAI HOC CHINH QUY\n"
@@ -43,63 +151,38 @@ def seed_sample_environment():
             "Diem trung binh tich luy (GPA): 3.92 / 4.0\n"
             "Hieu truong: DA KY SO VA XAC THUC DIEN TU\n"
         ).encode("utf-8")
-
-        doc1 = doc_svc.issue_document(
+        doc_txt = doc_svc.issue_document(
             issuer_id=1,
-            title="Bằng Cử Nhân An Toàn Thông Tin - Nguyễn Văn An",
+            title="Bằng Cử Nhân An Toàn Thông Tin (TXT) - Nguyễn Văn An",
             recipient_name="Nguyễn Văn An",
             doc_type="DIPLOMA",
-            file_bytes=doc1_content,
+            file_bytes=doc_txt_content,
             original_filename="Bang_Tot_Nghiep_Nguyen_Van_An.txt"
         )
-        print(f"[+] Đã phát hành Văn bản 1: {doc1['title']} (UUID: {doc1['doc_uuid']})")
+        print(f"[+] [TXT] Đã phát hành: {doc_txt['title']} (UUID: {doc_txt['doc_uuid']})")
 
-        # Sample Doc 2: Bang Diem
-        doc2_content = (
-            "TRUONG DAI HOC CONG NGHE THONG TIN - PHONG DAO TAO\n"
-            "==================================================\n"
-            "BANG DIEM KET QUA HOC TAP TOAN KHOA\n"
-            "Sinh vien: TRAN THI BICH - MSSV: 20260042\n"
-            "Mon 1: Bao Mat Mang May Tinh va He Thong - Diem: 10.0\n"
-            "Mon 2: Mat Ma Hoc Co So va Ung Dung - Diem: 9.5\n"
-            "Mon 3: Lap Trinh An Toan - Diem: 9.8\n"
-            "Xep loai chung: XUAT SAC\n"
-        ).encode("utf-8")
-
-        doc2 = doc_svc.issue_document(
-            issuer_id=1,
-            title="Bảng Điểm Toàn Khóa - Trần Thị Bích",
-            recipient_name="Trần Thị Bích",
-            doc_type="TRANSCRIPT",
-            file_bytes=doc2_content,
-            original_filename="Bang_Diem_Tran_Thi_Bich.txt"
-        )
-        print(f"[+] Đã phát hành Văn bản 2: {doc2['title']} (UUID: {doc2['doc_uuid']})")
-
-        # Sample Doc 3: Chung Chi Ky Thuat Vien (Revoked for demonstration)
-        doc3_content = (
+        # 7. FORMAT TXT REVOKED: Chứng Chỉ Lê Hoàng Phúc (Đã Thu Hồi)
+        doc_txt_rev_content = (
             "TRUONG DAI HOC CONG NGHE THONG TIN - TRUNG TAM TIN HOC\n"
             "CHUNG CHI HOAN THANH KHOA HOC AN NINH MANG CAN BAN\n"
             "Hoc vien: LE HOANG PHUC - Diem: 5.0\n"
         ).encode("utf-8")
-
-        doc3 = doc_svc.issue_document(
+        doc_txt_rev = doc_svc.issue_document(
             issuer_id=1,
-            title="Chứng Chỉ An Ninh Mạng - Lê Hoàng Phúc (Đã Thu Hồi)",
+            title="Chứng Chỉ An Ninh Mạng (TXT - Đã Thu Hồi) - Lê Hoàng Phúc",
             recipient_name="Lê Hoàng Phúc",
             doc_type="CERTIFICATE",
-            file_bytes=doc3_content,
+            file_bytes=doc_txt_rev_content,
             original_filename="Chung_Chi_Le_Hoang_Phuc.txt"
         )
-        # Immediately revoke doc3 to provide sample revoked document
         doc_svc.revoke_document(
-            doc_uuid=doc3["doc_uuid"],
+            doc_uuid=doc_txt_rev["doc_uuid"],
             revoked_by=1,
-            reason="Thu hồi chứng chỉ do học viên vi phạm quy chế thi cử và làm sai lệch hồ sơ đầu vào"
+            reason="Thu hồi chứng chỉ do gian lận trong kỳ thi thực hành"
         )
-        print(f"[+] Đã phát hành và thu hồi Văn bản 3: {doc3['title']} (UUID: {doc3['doc_uuid']})")
+        print(f"[+] [TXT] Đã phát hành & THU HỒI: {doc_txt_rev['title']} (UUID: {doc_txt_rev['doc_uuid']})")
 
-    print("[✓] Cơ sở dữ liệu và dữ liệu mẫu đã sẵn sàng 100%!")
+    print("[✓] Cơ sở dữ liệu và dữ liệu mẫu 5 định dạng (PDF, DOCX, PNG, JPG, TXT) đã sẵn sàng 100%!")
 
 
 if __name__ == "__main__":

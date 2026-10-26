@@ -9,16 +9,16 @@
 
 ## 1. TỔNG HỢP KẾT QUẢ KIỂM THỬ (EXECUTIVE SUMMARY)
 
-- **Tổng số Test Case:** **45 / 45**
-- **Số lượng ĐẠT (PASS):** **45 (100.0%)**
+- **Tổng số Test Case:** **46 / 46**
+- **Số lượng ĐẠT (PASS):** **46 (100.0%)**
 - **Số lượng THẤT BẠI (FAIL):** **0 (0.0%)**
 - **Số lượng LỖI (ERROR):** **0 (0.0%)**
 - **Số lượng BỎ QUA (NOT RUN):** **0 (0.0%)**
 - **Số lượng CẢNH BÁO RÒ RỈ TÀI NGUYÊN (ResourceWarning):** **0**
-- **Thời gian thực thi toàn bộ:** **12.275 giây**
+- **Thời gian thực thi toàn bộ:** **~8.9 giây**
 
 ```text
-Ran 45 tests in 12.275s
+Ran 46 tests in 8.919s
 OK
 ```
 
@@ -65,13 +65,14 @@ OK
 | **TC-AUTH-04** | Giới hạn số lần thử và khóa tạm thời (Rate Limiting Lockout) | > 5 lần sai -> PermissionError | Khóa 300s, mở lại khi reset | **PASS** |
 | **TC-AUTH-05** | Chế độ Production (`DEMO_MODE=False`) không seed tài khoản | Bảng users có 0 bản ghi | 0 demo users created | **PASS** |
 
-### 2.4. Module Quản Lý Tài Liệu (`tests/test_document.py` — 4 Tests)
+### 2.4. Module Quản Lý Tài Liệu (`tests/test_document.py` — 5 Tests)
 | Mã Test Case | Tên / Mục Tiêu Test Case | Kết Quả Mong Đợi | Kết Quả Thực Tế | Trạng Thái |
 |:---|:---|:---|:---|:---:|
 | **TC-DOC-01** | Khử khuẩn tên tệp chống Path Traversal (`../../etc/passwd`) | Loại bỏ ký tự điều hướng | Trả về `passwd.pdf` an toàn | **PASS** |
 | **TC-DOC-02** | Từ chối phát hành tệp rỗng (0 bytes) | Ném ngoại lệ `ValueError` | `ValueError` kích hoạt thành công | **PASS** |
 | **TC-DOC-03** | Phát hành văn bản, lưu file cô lập và ghi block sổ cái | Tạo document `ACTIVE`, block `ISSUE` | Bản ghi và block liên kết chuẩn | **PASS** |
 | **TC-DOC-04** | Thu hồi văn bản, đổi trạng thái và ghi block `REVOKE` | Đổi trạng thái `REVOKED`, thêm block | Cập nhật sổ cái đồng bộ | **PASS** |
+| **TC-DOC-05** | Ứng phó sự cố: Thu hồi khẩn cấp hàng loạt khi tài khoản Issuer bị chiếm quyền | Hủy toàn bộ văn bằng cấp lậu, đóng dấu sổ cái | Toàn bộ văn bằng chuyển `REVOKED` | **PASS** |
 
 ### 2.5. Module Kịch Bản Tấn Công & Phòng Thủ (`tests/test_attack_scenarios.py` — 7 Tests)
 | Mã Test Case | Tên / Mục Tiêu Test Case | Kết Quả Mong Đợi | Kết Quả Thực Tế | Trạng Thái |
@@ -99,4 +100,4 @@ OK
 
 ## 3. KẾT LUẬN NGHIỆM THU
 
-Bộ kiểm thử thực tế đạt tỷ lệ **45/45 PASS (100%)**, thời gian thực thi 12.275 giây, hoàn toàn không có cảnh báo rò rỉ kết nối `ResourceWarning`. Kết quả này xác nhận hệ thống hoạt động ổn định, an toàn và sẵn sàng cho buổi bảo vệ đồ án trước hội đồng.
+Bộ kiểm thử thực tế đạt tỷ lệ **46/46 PASS (100%)**, thời gian thực thi ~8.9 giây, hoàn toàn không có cảnh báo rò rỉ kết nối `ResourceWarning`. Kết quả này xác nhận hệ thống hoạt động ổn định, an toàn và sẵn sàng cho buổi bảo vệ đồ án trước hội đồng.

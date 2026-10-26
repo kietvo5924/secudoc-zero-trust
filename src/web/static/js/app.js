@@ -143,8 +143,19 @@ async function handlePrivacyFile(file) {
     const res = await fetch("/api/verify-hash", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hash: computedHash, claimed_uuid: claimedUuid || null })
+      body: JSON.stringify({ hash: computedHash, claimed_uuid: claimedUuid ? claimedUuid.trim() : null })
     });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let errMsg = errText;
+      try {
+        const errJson = JSON.parse(errText);
+        errMsg = errJson.error || errJson.explanation || errText;
+      } catch (e) {}
+      throw new Error(`Máy chủ trả về mã lỗi HTTP ${res.status}: ${errMsg}`);
+    }
+
     const result = await res.json();
 
     let certButtonHtml = "";
@@ -442,4 +453,91 @@ async function runRestoreDatabase(blockIndex = 0) {
     resultDiv.innerHTML = `<div class="alert alert-danger">Lỗi khôi phục: ${err.message}</div>`;
   }
 }
+
+/**
+ * Quick Sample Loaders for interactive demonstration & testing
+ */
+async function loadSampleFile(filename, uuid) {
+  try {
+    const res = await fetch(`/api/sample/${filename}`);
+    if (!res.ok) throw new Error("Không thể nạp tệp mẫu từ máy chủ");
+    const blob = await res.blob();
+    const mimeType = blob.type || "application/octet-stream";
+    const file = new File([blob], filename, { type: mimeType });
+
+    const fileInput = document.getElementById("documentFileInput");
+    if (fileInput) {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      fileInput.files = dataTransfer.files;
+    }
+
+    const nameDiv = document.getElementById("selectedFileName");
+    if (nameDiv) {
+      nameDiv.style.display = "block";
+      nameDiv.innerHTML = `📄 Đã nạp tệp mẫu: <strong>${filename}</strong> (${(blob.size / 1024).toFixed(1)} KB)`;
+    }
+
+    const uuidInput = document.getElementById("claimedUuid");
+    if (uuidInput) {
+      uuidInput.value = uuid || "";
+    }
+  } catch (e) {
+    alert("Lỗi khi tải tệp mẫu: " + e.message);
+  }
+}
+
+async function loadPrivacySampleFile(filename, uuid) {
+  try {
+    const res = await fetch(`/api/sample/${filename}`);
+    if (!res.ok) throw new Error("Không thể nạp tệp mẫu từ máy chủ");
+    const blob = await res.blob();
+    const mimeType = blob.type || "application/octet-stream";
+    const file = new File([blob], filename, { type: mimeType });
+
+    const uuidInput = document.getElementById("privacyClaimedUuid");
+    if (uuidInput) {
+      uuidInput.value = uuid || "";
+    }
+
+    const nameDiv = document.getElementById("privacyFileName");
+    if (nameDiv) {
+      nameDiv.style.display = "block";
+      nameDiv.innerHTML = `📄 Đang xử lý trong RAM: <strong>${filename}</strong> (${(blob.size / 1024).toFixed(1)} KB)`;
+    }
+
+    await handlePrivacyFile(file);
+  } catch (e) {
+    alert("Lỗi khi tải tệp mẫu: " + e.message);
+  }
+}
+
+/**
+ * Toggle visibility of quick demo fixtures on public pages
+ */
+function toggleDemoSamples() {
+  const container = document.getElementById("demoSamplesContainer");
+  const btn = document.getElementById("btnToggleDemoSamples");
+  if (!container) return;
+  const isHidden = container.style.display === "none" || container.style.display === "";
+  container.style.display = isHidden ? "block" : "none";
+  if (btn) {
+    btn.innerHTML = isHidden ? "⚡ Demo Fixtures ▴" : "⚡ Demo Fixtures ▾";
+    btn.style.color = isHidden ? "#00f2fe" : "rgba(255,255,255,0.28)";
+  }
+}
+
+function togglePrivacySamples() {
+  const container = document.getElementById("privacySamplesContainer");
+  const btn = document.getElementById("btnTogglePrivacySamples");
+  if (!container) return;
+  const isHidden = container.style.display === "none" || container.style.display === "";
+  container.style.display = isHidden ? "block" : "none";
+  if (btn) {
+    btn.innerHTML = isHidden ? "⚡ Demo RAM Fixtures ▴" : "⚡ Demo RAM Fixtures ▾";
+    btn.style.color = isHidden ? "var(--accent-cyan)" : "rgba(255,255,255,0.28)";
+  }
+}
+
+
 

@@ -7,8 +7,9 @@ import os
 import shutil
 import secrets
 from pathlib import Path
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort, send_file
 from ..config import (
+    BASE_DIR,
     SECRET_KEY,
     MAX_CONTENT_LENGTH,
     KEY_DIR,
@@ -26,7 +27,7 @@ from ..crypto.signature import sign_hash, verify_signature
 from ..crypto.qr import generate_qr_data_uri
 from ..models.database import DatabaseManager, get_db
 from ..services.auth_service import AuthService, require_role
-from ..services.doc_service import DocumentService
+from ..services.doc_service import DocumentService, sanitize_filename
 from ..services.audit_service import AuditService
 from ..services.verify_engine import VerificationEngine
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -62,6 +63,7 @@ def create_app(test_config=None) -> Flask:
     app.config["SESSION_COOKIE_SAMESITE"] = SESSION_COOKIE_SAMESITE
     app.config["SESSION_COOKIE_SECURE"] = SESSION_COOKIE_SECURE
     app.config["DEMO_MODE"] = DEMO_MODE
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
 
     if test_config:
         app.config.update(test_config)
@@ -153,13 +155,14 @@ def create_app(test_config=None) -> Flask:
         result = None
         if request.method == "POST":
             uploaded_file = request.files.get("document_file")
-            claimed_uuid = request.form.get("claimed_uuid", "").strip()
+            raw_uuid = request.form.get("claimed_uuid") or ""
+            claimed_uuid = str(raw_uuid).strip() if raw_uuid and str(raw_uuid).strip() else None
 
             if not uploaded_file or uploaded_file.filename == "":
                 flash("Vui lòng chọn tệp văn bản cần xác minh", "danger")
             else:
                 file_bytes = uploaded_file.read()
-                result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid or None)
+                result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid)
 
         # Apply Data Minimization: Mask recipient PII on public landing page
         raw_recent = doc_svc.list_documents(limit=5)
@@ -174,13 +177,14 @@ def create_app(test_config=None) -> Flask:
     @app.route("/verify", methods=["POST"])
     def verify_api():
         uploaded_file = request.files.get("document_file")
-        claimed_uuid = request.form.get("claimed_uuid", "").strip()
+        raw_uuid = request.form.get("claimed_uuid") or ""
+        claimed_uuid = str(raw_uuid).strip() if raw_uuid and str(raw_uuid).strip() else None
 
         if not uploaded_file or uploaded_file.filename == "":
             return jsonify({"error": "No file provided"}), 400
 
         file_bytes = uploaded_file.read()
-        result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid or None)
+        result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid)
         return jsonify(result)
 
     @app.route("/api/verify-hash", methods=["POST"])
@@ -189,9 +193,11 @@ def create_app(test_config=None) -> Flask:
         Verify a document SHA-256 hash calculated in-browser (Client-side Hashing / Data Minimization).
         The raw bytes of sensitive files are not uploaded, but the hash/UUID is looked up on the server.
         """
-        data = request.get_json() or {}
-        hash_val = data.get("hash", "").strip()
-        claimed_uuid = data.get("claimed_uuid", "").strip() or None
+        data = request.get_json(silent=True) or {}
+        raw_hash = data.get("hash") or data.get("doc_hash") or ""
+        hash_val = str(raw_hash).strip()
+        raw_uuid = data.get("claimed_uuid") or data.get("uuid")
+        claimed_uuid = str(raw_uuid).strip() if raw_uuid and str(raw_uuid).strip() else None
 
         if not hash_val:
             return jsonify({"error": "No hash provided"}), 400
@@ -229,6 +235,15 @@ def create_app(test_config=None) -> Flask:
                 "Client-side hashing preserves bandwidth and file privacy, but is not a Zero-Knowledge Proof."
             ]
         })
+
+    @app.route("/api/sample/<filename>", methods=["GET"])
+    def get_sample_file(filename):
+        """Serve sample files for quick demonstration in browser."""
+        safe_name = sanitize_filename(filename)
+        sample_path = BASE_DIR / "samples" / safe_name
+        if not sample_path.is_file():
+            abort(404)
+        return send_file(sample_path, as_attachment=False)
 
     # ---------------------------------------------------------
     # Authentication Routes
@@ -525,6 +540,17 @@ def create_app(test_config=None) -> Flask:
             verify_url=verify_url,
             qr_data_uri=qr_data_uri
         )
+
+    @app.route("/download/<doc_uuid>")
+    def download_document(doc_uuid):
+        """Allow downloading the authentic binary document file (PDF, DOCX, PNG, JPG, TXT)."""
+        doc = doc_svc.get_document_by_uuid(doc_uuid)
+        if not doc:
+            abort(404)
+        file_path = Path(doc["file_storage_path"])
+        if not file_path.is_file():
+            abort(404)
+        return send_file(file_path, as_attachment=True, download_name=doc["original_filename"])
 
     return app
 

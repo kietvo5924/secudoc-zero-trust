@@ -11,28 +11,34 @@ import qrcode.image.svg
 
 def generate_qr_data_uri(content_url: str, box_size: int = 8, border: int = 2) -> str:
     """
-    Generate a standard scannable QR Code as a Base64-encoded PNG Data URI.
+    Generate a standard scannable QR Code as a Base64-encoded Data URI (PNG or SVG fallback).
     Can be directly embedded in HTML <img src="..."> tags.
     """
-    qr = qrcode.QRCode(
-        version=None,  # Automatic version selection based on content length
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=box_size,
-        border=border,
-    )
-    qr.add_data(content_url)
-    qr.make(fit=True)
+    try:
+        qr = qrcode.QRCode(
+            version=None,  # Automatic version selection based on content length
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=box_size,
+            border=border,
+        )
+        qr.add_data(content_url)
+        qr.make(fit=True)
 
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffer = io.BytesIO()
-    # Save the underlying PIL image to PNG buffer
-    if hasattr(img, "get_image"):
-        pil_img = img.get_image()
-    else:
-        pil_img = img
-    pil_img.save(buffer, format="PNG")
-    b64_str = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{b64_str}"
+        img = qr.make_image(fill_color="black", back_color="white")
+        buffer = io.BytesIO()
+        # Save the underlying PIL image to PNG buffer
+        if hasattr(img, "get_image"):
+            pil_img = img.get_image()
+        else:
+            pil_img = img
+        pil_img.save(buffer, format="PNG")
+        b64_str = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{b64_str}"
+    except (ImportError, OSError):
+        # Fallback to SVG data URI if PIL C-extensions are blocked by OS Application Control policy
+        svg_content = generate_qr_svg(content_url)
+        b64_svg = base64.b64encode(svg_content.encode("utf-8")).decode("ascii")
+        return f"data:image/svg+xml;base64,{b64_svg}"
 
 
 def generate_qr_svg(content_url: str) -> str:
