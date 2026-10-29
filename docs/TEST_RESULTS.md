@@ -83,7 +83,7 @@ OK
 | **TC-ATTACK-04** | THR-08: Tải tệp tên `../../../../evil.dll` | Chuẩn hóa thành `evil.dll` | Không ghi đè ngoài thư mục | **PASS** |
 | **TC-ATTACK-05** | THR-03: Vượt rào văn bản đã bị thu hồi | Bị chặn với trạng thái `REVOKED` | `status == "REVOKED"` | **PASS** |
 | **TC-ATTACK-06** | Phục hồi khối tùy ý (index != 0) & Cô lập Sandbox DB | Hoàn nguyên đúng snapshot gốc | Khối 2 phục hồi; DB chính nguyên vẹn | **PASS** |
-| **TC-ATTACK-07** | Tấn công tính toán lại toàn bộ sổ cái (Chain Recalculation) | Bị phát hiện bởi External Anchor Head | Neo đỉnh chuỗi phát hiện can thiệp | **PASS** |
+| **TC-ATTACK-07** | Tấn công tính toán lại toàn bộ sổ cái (Chain Recalculation) | Mô phỏng phát hiện qua Head Hash Checkpoint | Khái niệm kiểm tra qua Unit Test (chưa vận hành dịch vụ neo độc lập bên ngoài) | **PASS** |
 
 ### 2.6. Module An Ninh Web & Quyền Riêng Tư (`tests/test_web_security.py` — 7 Tests)
 | Mã Test Case | Tên / Mục Tiêu Test Case | Kết Quả Mong Đợi | Kết Quả Thực Tế | Trạng Thái |

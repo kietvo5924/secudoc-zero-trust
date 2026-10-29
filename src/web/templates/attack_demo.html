@@ -27,10 +27,9 @@
 
   <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
     <select id="bitFlipDocSelect" class="form-control" style="max-width: 380px;">
-      <option value="">-- Dùng văn bản mẫu giả lập tích hợp sẵn --</option>
-      {% for doc in recent_docs %}
-        <option value="{{ doc.doc_uuid }}">{{ doc.title }} ({{ doc.recipient_name }})</option>
-      {% endfor %}
+      <option value="">-- Mẫu 1: Bằng Tốt Nghiệp Mẫu (Giả lập trong RAM) --</option>
+      <option value="SAMPLE_TRANSCRIPT">-- Mẫu 2: Bảng Điểm Mẫu (Giả lập trong RAM) --</option>
+      <option value="SAMPLE_CERTIFICATE">-- Mẫu 3: Giấy Khen Mẫu (Giả lập trong RAM) --</option>
     </select>
 
     <button type="button" class="btn btn-danger" onclick="runBitFlipAttack(document.getElementById('bitFlipDocSelect').value)">
@@ -56,10 +55,9 @@
 
   <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
     <select id="forgeryDocSelect" class="form-control" style="max-width: 380px;">
-      <option value="">-- Dùng văn bản mẫu giả lập tích hợp sẵn --</option>
-      {% for doc in recent_docs %}
-        <option value="{{ doc.doc_uuid }}">{{ doc.title }} ({{ doc.recipient_name }})</option>
-      {% endfor %}
+      <option value="">-- Mẫu 1: Dữ liệu mẫu giả định 1 --</option>
+      <option value="SAMPLE_TRANSCRIPT">-- Mẫu 2: Dữ liệu mẫu giả định 2 --</option>
+      <option value="SAMPLE_CERTIFICATE">-- Mẫu 3: Dữ liệu mẫu giả định 3 --</option>
     </select>
 
     <button type="button" class="btn btn-warning" onclick="runSignatureForgery(document.getElementById('forgeryDocSelect').value)">

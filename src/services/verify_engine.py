@@ -56,6 +56,9 @@ class VerificationEngine:
         are not uploaded across the network, while the hash/UUID is looked up on the server.
         """
         def _result(status: str, title: str, badge: str, comp_h: str, exp_h: str | None, sig_val: bool, doc_obj: dict | None, expl: str, **kwargs) -> dict[str, Any]:
+            safe_doc = dict(doc_obj) if doc_obj else None
+            if safe_doc:
+                safe_doc.pop("file_storage_path", None)
             res = {
                 "status": status,
                 "is_authentic": (status == "VERIFIED_AUTHENTIC"),
@@ -64,7 +67,7 @@ class VerificationEngine:
                 "computed_hash": comp_h,
                 "expected_hash": exp_h,
                 "signature_valid": sig_val,
-                "document": doc_obj,
+                "document": safe_doc,
                 "explanation": expl,
             }
             res.update(kwargs)
@@ -122,12 +125,13 @@ class VerificationEngine:
             doc_type=doc["doc_type"],
             issuer_name=doc["issuer_name"],
             issued_at=doc["issued_at"],
+            title=doc.get("title", ""),
             version=1
         )
         canonical_valid = verify_canonical_signature(public_key, canonical_payload, doc["signature"])
-        # Backwards compatibility fallback: verify raw hash signature for legacy documents
-        legacy_valid = verify_signature(public_key, doc["doc_hash"], doc["signature"]) if not canonical_valid else False
-        sig_valid = canonical_valid or legacy_valid
+        # Zero-Trust Strict Enforcement: Insecure fallback to raw hash signatures is rejected
+        # to ensure that metadata tampering cannot be hidden behind a downgraded raw signature.
+        sig_valid = canonical_valid
 
         if not sig_valid:
             return _result(

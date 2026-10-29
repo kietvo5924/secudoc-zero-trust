@@ -140,6 +140,56 @@ class TestDocumentService(unittest.TestCase):
         self.assertEqual(check2["status"], "REVOKED")
         self.assertIn("TÀI KHOẢN BỊ XÂM PHẠM", check1["revocation_reason"])
 
+    def test_unsupported_file_extension_rejected_at_backend(self):
+        """TC-DOC-06: Backend strictly rejects disallowed executable/script extensions (.exe, .sh, .php, etc.)."""
+        disallowed = ["malware.exe", "webshell.php", "script.sh", "exploit.bat", "library.dll", "no_extension"]
+        for fname in disallowed:
+            with self.subTest(filename=fname):
+                with self.assertRaises(ValueError) as ctx:
+                    self.doc_svc.issue_document(
+                        issuer_id=1,
+                        title="Malicious Test",
+                        recipient_name="Attacker",
+                        doc_type="CERTIFICATE",
+                        file_bytes=b"MALICIOUS_PAYLOAD",
+                        original_filename=fname
+                    )
+                self.assertIn("không hợp lệ hoặc không được hỗ trợ", str(ctx.exception))
+
+    def test_allowed_file_extensions_accepted(self):
+        """TC-DOC-07: Backend accepts all white-listed document formats (pdf, docx, png, jpg, jpeg, txt)."""
+        allowed = ["test.pdf", "test.docx", "test.png", "test.jpg", "test.jpeg", "test.txt"]
+        for fname in allowed:
+            with self.subTest(filename=fname):
+                doc = self.doc_svc.issue_document(
+                    issuer_id=1,
+                    title=f"Valid {fname}",
+                    recipient_name="Student Test",
+                    doc_type="CERTIFICATE",
+                    file_bytes=b"VALID CONTENT",
+                    original_filename=fname
+                )
+                self.assertIsNotNone(doc)
+                self.assertEqual(doc["status"], "ACTIVE")
+
+    def test_locked_issuer_cannot_issue_documents(self):
+        """TC-DOC-08: A compromised/locked issuer cannot issue new documents."""
+        # Mark issuer 1 as COMPROMISED
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET status = 'COMPROMISED' WHERE id = 1;")
+
+        with self.assertRaises(PermissionError) as ctx:
+            self.doc_svc.issue_document(
+                issuer_id=1,
+                title="Attempted Forgery",
+                recipient_name="Victim",
+                doc_type="CERTIFICATE",
+                file_bytes=b"NEW DOC",
+                original_filename="valid.pdf"
+            )
+        self.assertIn("bị khóa", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

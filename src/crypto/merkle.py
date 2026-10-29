@@ -91,7 +91,11 @@ def verify_audit_chain(
 
 
 def get_chain_head_hash(blocks: list[dict[str, Any]]) -> str | None:
-    """Return the latest block hash (the head/tip of the hash chain) as an anchor checkpoint."""
+    """
+    Return the latest block hash (the head/tip of the hash chain) for checkpoint comparison.
+    Note: In this prototype, this provides the cryptographic head digest used for threat simulation
+    (TC-ATTACK-07). An automated, independent external anchoring service is not currently operated in runtime.
+    """
     if not blocks:
         return None
     return blocks[-1]["block_hash"]

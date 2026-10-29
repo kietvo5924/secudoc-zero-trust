@@ -18,11 +18,12 @@ def build_canonical_payload(
     doc_type: str,
     issuer_name: str,
     issued_at: str,
+    title: str = "",
     version: int = 1
 ) -> dict[str, Any]:
     """
     Construct a deterministic, canonical dictionary binding document content hash with essential metadata.
-    Any alteration to recipient_name, doc_type, issuer_name, or timestamps will invalidate the signature.
+    Any alteration to recipient_name, title, doc_type, issuer_name, or timestamps will invalidate the signature.
     """
     return {
         "doc_hash": doc_hash.lower().strip(),
@@ -31,6 +32,7 @@ def build_canonical_payload(
         "issued_at": issued_at.strip(),
         "issuer_name": issuer_name.strip(),
         "recipient_name": recipient_name.strip(),
+        "title": title.strip(),
         "version": version
     }
 

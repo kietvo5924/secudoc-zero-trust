@@ -158,6 +158,52 @@ class TestVerificationPipeline(unittest.TestCase):
         self.assertEqual(res["status"], "AUDIT_CHAIN_BROKEN")
         self.assertFalse(res["is_authentic"])
 
+    def test_metadata_tampering_title(self):
+        """TC-VERIFY-10: Tampering title in SQLite invalidates the canonical metadata signature."""
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE documents SET title = 'Bằng Tốt Nghiệp Loại Xuất Sắc HACKED' WHERE doc_uuid = ?;",
+                (self.doc["doc_uuid"],)
+            )
+
+        res = self.verify_engine.verify_document(self.original_bytes)
+        self.assertEqual(res["status"], "INVALID_SIGNATURE")
+        self.assertFalse(res["signature_valid"])
+
+    def test_metadata_tampering_doc_type(self):
+        """TC-VERIFY-11: Tampering doc_type in SQLite invalidates the canonical metadata signature."""
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE documents SET doc_type = 'DIPLOMA' WHERE doc_uuid = ?;",
+                (self.doc["doc_uuid"],)
+            )
+
+        res = self.verify_engine.verify_document(self.original_bytes)
+        self.assertEqual(res["status"], "INVALID_SIGNATURE")
+        self.assertFalse(res["signature_valid"])
+
+    def test_raw_hash_fallback_rejection_prevents_downgrade(self):
+        """TC-VERIFY-12: Zero-Trust rejects raw hash signature fallback to prevent metadata tampering bypass."""
+        from src.crypto.signature import sign_hash
+        # Create a raw hash signature (signed over raw doc_hash, not canonical metadata payload)
+        priv_key = self.key_mgr.get_private_key()
+        raw_sig = sign_hash(priv_key, self.doc["doc_hash"])
+
+        # Tamper recipient_name AND set signature to raw_sig
+        with self.db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE documents SET recipient_name = 'Attacker Name', signature = ? WHERE doc_uuid = ?;",
+                (raw_sig, self.doc["doc_uuid"])
+            )
+
+        # Verification must REJECT with INVALID_SIGNATURE; must NOT fall back to accept raw hash
+        res = self.verify_engine.verify_document(self.original_bytes)
+        self.assertEqual(res["status"], "INVALID_SIGNATURE")
+        self.assertFalse(res["signature_valid"])
+
 
 if __name__ == "__main__":
     unittest.main()

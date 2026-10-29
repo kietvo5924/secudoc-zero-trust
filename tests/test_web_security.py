@@ -185,6 +185,211 @@ class TestWebSecurityAndPrivacy(unittest.TestCase):
         self.assertEqual(len(main_blocks_after), initial_main_len)
         self.assertEqual(main_blocks_after[0]["action"], "GENESIS")
 
+    def test_unauthenticated_download_rejected(self):
+        """TC-WEB-08: Unauthenticated access to /download/<doc_uuid> is rejected (redirects to login)."""
+        doc = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Confidential File",
+            recipient_name="Student Test",
+            doc_type="CERTIFICATE",
+            file_bytes=b"CONFIDENTIAL_PAYLOAD_BYTES",
+            original_filename="secret.pdf"
+        )
+        res = self.client.get(f"/download/{doc['doc_uuid']}")
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("/login", res.headers["Location"])
+
+    def test_unauthorized_download_by_verifier_rejected(self):
+        """TC-WEB-09: PUBLIC_VERIFIER role cannot download raw documents (HTTP 403 Forbidden)."""
+        doc = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Diploma File",
+            recipient_name="Student A",
+            doc_type="DIPLOMA",
+            file_bytes=b"DIPLOMA_PAYLOAD",
+            original_filename="diploma.pdf"
+        )
+        self._login_session("verifier", "PUBLIC_VERIFIER", user_id=3)
+        res = self.client.get(f"/download/{doc['doc_uuid']}")
+        self.assertEqual(res.status_code, 403)
+
+    def test_issuer_cannot_download_other_issuer_document(self):
+        """TC-WEB-10: Issuer B cannot download a document issued by Issuer A (IDOR prevention, HTTP 403)."""
+        doc = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Issuer A File",
+            recipient_name="Student B",
+            doc_type="CERTIFICATE",
+            file_bytes=b"ISSUER_A_BYTES",
+            original_filename="doc_a.pdf"
+        )
+        # Login as Issuer 2
+        self._login_session("issuer2", "ISSUER", user_id=2)
+        res = self.client.get(f"/download/{doc['doc_uuid']}")
+        self.assertEqual(res.status_code, 403)
+
+    def test_authorized_issuer_and_auditor_can_download_document(self):
+        """TC-WEB-11: Owning issuer and auditor can download the authentic binary file."""
+        doc = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Authorized Download File",
+            recipient_name="Student C",
+            doc_type="CERTIFICATE",
+            file_bytes=b"AUTHORIZED_CONTENT",
+            original_filename="doc_c.pdf"
+        )
+        # Owning Issuer 1
+        self._login_session("issuer", "ISSUER", user_id=1)
+        res_owner = self.client.get(f"/download/{doc['doc_uuid']}")
+        self.assertEqual(res_owner.status_code, 200)
+        self.assertEqual(res_owner.data, b"AUTHORIZED_CONTENT")
+        res_owner.close()
+
+        # Auditor
+        self._login_session("auditor", "AUDITOR", user_id=2)
+        res_auditor = self.client.get(f"/download/{doc['doc_uuid']}")
+        self.assertEqual(res_auditor.status_code, 200)
+        self.assertEqual(res_auditor.data, b"AUTHORIZED_CONTENT")
+        res_auditor.close()
+
+    def test_unauthenticated_certificate_view_masks_pii_and_uuid(self):
+        """TC-WEB-12: Unauthenticated view of /certificate/<doc_uuid> masks recipient PII and does not leak storage path."""
+        doc = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Confidential Certificate",
+            recipient_name="Nguyen Van Chuyen",
+            doc_type="CERTIFICATE",
+            file_bytes=b"CERT_BYTES",
+            original_filename="cert.pdf"
+        )
+        res = self.client.get(f"/certificate/{doc['doc_uuid']}")
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode("utf-8")
+        # Full name must NOT appear in HTML
+        self.assertNotIn("Nguyen Van Chuyen", html)
+        self.assertIn("N*** V*** C***", html)
+        # file_storage_path must NEVER be exposed
+        self.assertNotIn("file_storage_path", html)
+        self.assertNotIn(".bin", html)
+
+    def test_attack_lab_does_not_leak_real_doc_uuids_or_recipients(self):
+        """TC-WEB-13: /attack-lab does not expose real database document UUIDs or recipient names."""
+        doc = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Secret Executive Diploma",
+            recipient_name="Pham Truong Giang",
+            doc_type="DIPLOMA",
+            file_bytes=b"SECRET_DIPLOMA",
+            original_filename="secret.pdf"
+        )
+        res = self.client.get("/attack-lab")
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode("utf-8")
+        self.assertNotIn("Pham Truong Giang", html)
+        self.assertNotIn(doc["doc_uuid"], html)
+
+    def test_verify_apis_do_not_leak_file_storage_path_or_full_pii(self):
+        """TC-WEB-14: Verification APIs (/verify and /api/verify-hash) strip file_storage_path and mask PII for public."""
+        doc = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Public Verification Test",
+            recipient_name="Hoang Kim Long",
+            doc_type="CERTIFICATE",
+            file_bytes=b"VERIFY_PAYLOAD_TEST",
+            original_filename="verify.pdf"
+        )
+        # 1. /api/verify-hash
+        res_hash = self.client.post("/api/verify-hash", json={"hash": doc["doc_hash"]})
+        self.assertEqual(res_hash.status_code, 200)
+        data_hash = res_hash.get_json()
+        self.assertNotIn("file_storage_path", str(data_hash))
+        if data_hash.get("document"):
+            self.assertNotIn("Hoang Kim Long", data_hash["document"]["recipient_name"])
+            self.assertIn("H*** K*** L***", data_hash["document"]["recipient_name"])
+
+        # 2. /verify (multipart)
+        res_file = self.client.post("/verify", data={
+            "document_file": (io.BytesIO(b"VERIFY_PAYLOAD_TEST"), "verify.pdf")
+        })
+        self.assertEqual(res_file.status_code, 200)
+        data_file = res_file.get_json()
+        self.assertNotIn("file_storage_path", str(data_file))
+        if data_file.get("document"):
+            self.assertNotIn("Hoang Kim Long", data_file["document"]["recipient_name"])
+
+    def test_simulation_api_rate_limiting(self):
+        """TC-WEB-15: CPU-intensive simulation endpoint rate limits callers after 10 requests/minute (HTTP 429)."""
+        from src.web.app import _simulation_calls
+        _simulation_calls.clear()
+        self._login_session("auditor", "AUDITOR")
+
+        # Send 10 calls with valid CSRF
+        for _ in range(10):
+            res = self.client.post("/api/attack/forge-signature", json={}, headers={"X-CSRFToken": "valid_test_csrf_token_abcdef123456"})
+            self.assertEqual(res.status_code, 200)
+
+        # 11th call must return 429 Too Many Requests
+        res_11 = self.client.post("/api/attack/forge-signature", json={}, headers={"X-CSRFToken": "valid_test_csrf_token_abcdef123456"})
+        self.assertEqual(res_11.status_code, 429)
+        self.assertIn("Too Many Requests", res_11.get_json()["error"])
+
+    def test_auditor_incident_response_compromise_issuer(self):
+        """TC-WEB-16: Auditor can trigger incident response to lock compromised issuer and batch-revoke documents."""
+        doc1 = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Doc 1",
+            recipient_name="Student 1",
+            doc_type="CERTIFICATE",
+            file_bytes=b"DOC_1",
+            original_filename="d1.pdf"
+        )
+        doc2 = self.app.doc_svc.issue_document(
+            issuer_id=1,
+            title="Doc 2",
+            recipient_name="Student 2",
+            doc_type="CERTIFICATE",
+            file_bytes=b"DOC_2",
+            original_filename="d2.pdf"
+        )
+
+        # Unauthenticated request (even with CSRF token) fails with HTTP 401
+        with self.client.session_transaction() as sess:
+            sess["csrf_token"] = "valid_test_csrf_token_abcdef123456"
+        res_unauth = self.client.post(
+            "/api/incident/compromise-issuer",
+            json={"issuer_id": 1},
+            headers={"X-CSRFToken": "valid_test_csrf_token_abcdef123456"}
+        )
+        self.assertEqual(res_unauth.status_code, 401)
+
+        # Authenticated as AUDITOR
+        self._login_session("auditor", "AUDITOR", user_id=2)
+        res = self.client.post(
+            "/api/incident/compromise-issuer",
+            json={"issuer_id": 1, "reason": "Phát hiện rò rỉ private credentials của phòng đào tạo"},
+            headers={"X-CSRFToken": "valid_test_csrf_token_abcdef123456"}
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["status"], "INCIDENT_RESOLVED")
+        self.assertEqual(data["account_status"], "COMPROMISED")
+        self.assertGreaterEqual(data["revoked_count"], 2)
+
+        # Verify docs are REVOKED
+        d1_check = self.app.doc_svc.get_document_by_uuid(doc1["doc_uuid"])
+        self.assertEqual(d1_check["status"], "REVOKED")
+
+        # Verify compromised issuer cannot issue new docs
+        with self.assertRaises(PermissionError):
+            self.app.doc_svc.issue_document(
+                issuer_id=1,
+                title="Forged",
+                recipient_name="Victim",
+                doc_type="CERTIFICATE",
+                file_bytes=b"NEW",
+                original_filename="f.pdf"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

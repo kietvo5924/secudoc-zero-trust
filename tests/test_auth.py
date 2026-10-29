@@ -101,6 +101,23 @@ class TestAuthAndRBAC(unittest.TestCase):
             row = cursor.fetchone()
             self.assertEqual(row["cnt"], 0)
 
+    def test_locked_or_compromised_user_cannot_authenticate(self):
+        """TC-AUTH-06: A user with status 'COMPROMISED' or 'LOCKED' cannot authenticate."""
+        # Lock user 1
+        self.auth_svc.lock_user(user_id=1, status="COMPROMISED")
+
+        with self.assertRaises(PermissionError) as ctx:
+            self.auth_svc.authenticate("issuer", "IssuerSecurePass2026!")
+        self.assertIn("đã bị khóa do sự cố an ninh", str(ctx.exception))
+
+    def test_auth_service_lock_user(self):
+        """TC-AUTH-07: lock_user correctly updates user status in database."""
+        success = self.auth_svc.lock_user(user_id=2, status="LOCKED")
+        self.assertTrue(success)
+        user = self.auth_svc.get_user_by_id(2)
+        self.assertIsNotNone(user)
+        self.assertEqual(user["status"], "LOCKED")
+
 
 if __name__ == "__main__":
     unittest.main()

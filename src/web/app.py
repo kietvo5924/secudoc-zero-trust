@@ -6,6 +6,7 @@ and isolated attack simulation with hardened CSRF, rate-limiting, and open-redir
 import os
 import shutil
 import secrets
+import time
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, abort, send_file
 from ..config import (
@@ -27,7 +28,7 @@ from ..crypto.signature import sign_hash, verify_signature
 from ..crypto.qr import generate_qr_data_uri
 from ..models.database import DatabaseManager, get_db
 from ..services.auth_service import AuthService, require_role
-from ..services.doc_service import DocumentService, sanitize_filename
+from ..services.doc_service import DocumentService, sanitize_filename, mask_recipient_name
 from ..services.audit_service import AuditService
 from ..services.verify_engine import VerificationEngine
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -44,14 +45,39 @@ def is_safe_redirect(target: str | None) -> bool:
     return target.startswith("/")
 
 
-def mask_recipient_name(name: str) -> str:
-    """Mask PII recipient names for public-facing unauthenticated landing page."""
-    parts = name.strip().split()
-    if not parts:
-        return "***"
-    if len(parts) == 1:
-        return parts[0][:1] + "***"
-    return " ".join(p[:1] + "***" for p in parts)
+def sanitize_verify_result_for_public(result: dict | None, is_authenticated: bool = False) -> dict | None:
+    """Sanitize verification result to prevent file_storage_path, raw UUID, and PII leakage."""
+    if not result:
+        return result
+    clean_res = dict(result)
+    clean_res.pop("file_storage_path", None)
+    if clean_res.get("document"):
+        doc = dict(clean_res["document"])
+        doc.pop("file_storage_path", None)
+        if not is_authenticated:
+            if doc.get("recipient_name"):
+                doc["recipient_name"] = mask_recipient_name(doc["recipient_name"])
+            if doc.get("doc_uuid"):
+                raw_u = doc["doc_uuid"]
+                doc["doc_uuid"] = raw_u[:8] + "-****-****-****-" + raw_u[-12:]
+        clean_res["document"] = doc
+    return clean_res
+
+
+_simulation_calls: dict[str, list[float]] = {}
+SIMULATION_RATE_LIMIT_PER_MINUTE = 10
+
+
+def check_simulation_rate_limit(client_ip: str) -> bool:
+    """Enforce strict rate limit on CPU-intensive simulation endpoints (e.g. RSA key generation)."""
+    now = time.time()
+    calls = _simulation_calls.get(client_ip, [])
+    calls = [t for t in calls if now - t < 60.0]
+    _simulation_calls[client_ip] = calls
+    if len(calls) >= SIMULATION_RATE_LIMIT_PER_MINUTE:
+        return False
+    calls.append(now)
+    return True
 
 
 def create_app(test_config=None) -> Flask:
@@ -153,6 +179,7 @@ def create_app(test_config=None) -> Flask:
     @app.route("/", methods=["GET", "POST"])
     def index():
         result = None
+        is_authed = bool(session.get("user"))
         if request.method == "POST":
             uploaded_file = request.files.get("document_file")
             raw_uuid = request.form.get("claimed_uuid") or ""
@@ -162,14 +189,19 @@ def create_app(test_config=None) -> Flask:
                 flash("Vui lòng chọn tệp văn bản cần xác minh", "danger")
             else:
                 file_bytes = uploaded_file.read()
-                result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid)
+                raw_result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid)
+                result = sanitize_verify_result_for_public(raw_result, is_authenticated=is_authed)
 
-        # Apply Data Minimization: Mask recipient PII on public landing page
+        # Apply Data Minimization: Mask recipient PII and internal UUID on public landing page
         raw_recent = doc_svc.list_documents(limit=5)
         recent_docs = []
         for d in raw_recent:
             masked_doc = dict(d)
-            masked_doc["recipient_name"] = mask_recipient_name(d["recipient_name"])
+            masked_doc.pop("file_storage_path", None)
+            if not is_authed:
+                masked_doc["recipient_name"] = mask_recipient_name(d["recipient_name"])
+                raw_u = d["doc_uuid"]
+                masked_doc["doc_uuid"] = raw_u[:8] + "-****-****-****-" + raw_u[-12:]
             recent_docs.append(masked_doc)
 
         return render_template("index.html", result=result, recent_docs=recent_docs)
@@ -184,8 +216,9 @@ def create_app(test_config=None) -> Flask:
             return jsonify({"error": "No file provided"}), 400
 
         file_bytes = uploaded_file.read()
-        result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid)
-        return jsonify(result)
+        raw_result = verify_engine.verify_document(file_bytes, claimed_uuid=claimed_uuid)
+        is_authed = bool(session.get("user"))
+        return jsonify(sanitize_verify_result_for_public(raw_result, is_authenticated=is_authed))
 
     @app.route("/api/verify-hash", methods=["POST"])
     def api_verify_hash():
@@ -202,8 +235,9 @@ def create_app(test_config=None) -> Flask:
         if not hash_val:
             return jsonify({"error": "No hash provided"}), 400
 
-        result = verify_engine.verify_hash(hash_val, claimed_uuid=claimed_uuid)
-        return jsonify(result)
+        raw_result = verify_engine.verify_hash(hash_val, claimed_uuid=claimed_uuid)
+        is_authed = bool(session.get("user"))
+        return jsonify(sanitize_verify_result_for_public(raw_result, is_authenticated=is_authed))
 
     @app.route("/api/public-key", methods=["GET"])
     def get_public_key():
@@ -329,6 +363,10 @@ def create_app(test_config=None) -> Flask:
                 original_filename=uploaded_file.filename
             )
             flash(f"Phát hành và ký số văn bản thành công! Mã chứng nhận: {doc['doc_uuid']}", "success")
+        except PermissionError as e:
+            flash(f"Từ chối phát hành văn bản: {str(e)}", "danger")
+        except ValueError as e:
+            flash(f"Lỗi kiểm tra tệp đầu vào: {str(e)}", "warning")
         except Exception as e:
             flash(f"Lỗi khi phát hành văn bản: {str(e)}", "danger")
 
@@ -348,7 +386,7 @@ def create_app(test_config=None) -> Flask:
         return redirect(url_for("dashboard"))
 
     # ---------------------------------------------------------
-    # Auditor Ledger Routes
+    # Auditor Ledger & Incident Response Routes
     # ---------------------------------------------------------
     @app.route("/audit")
     @require_role("AUDITOR")
@@ -363,39 +401,81 @@ def create_app(test_config=None) -> Flask:
         status = audit_svc.verify_chain_integrity(require_genesis=True)
         return jsonify(status)
 
+    @app.route("/api/incident/compromise-issuer", methods=["POST"])
+    @require_role("AUDITOR")
+    def api_incident_compromise_issuer():
+        """
+        Incident Response: When an Issuer account is compromised, lock the account and batch-revoke all issued documents.
+        Strictly restricted to AUDITOR role.
+        """
+        data = request.get_json(silent=True) or {}
+        issuer_id = data.get("issuer_id")
+        reason = data.get("reason", "Tài khoản Issuer bị lộ thông tin xác thực / xâm nhập trái phép").strip()
+
+        if not issuer_id:
+            return jsonify({"error": "Bad Request", "message": "Thiếu issuer_id"}), 400
+
+        try:
+            issuer_id = int(issuer_id)
+        except ValueError:
+            return jsonify({"error": "Bad Request", "message": "issuer_id phải là số nguyên"}), 400
+
+        auditor_user = session["user"]
+        revoked_uuids = doc_svc.emergency_batch_revoke(
+            issuer_id=issuer_id,
+            reason=reason,
+            revoked_by=auditor_user["id"]
+        )
+
+        return jsonify({
+            "status": "INCIDENT_RESOLVED",
+            "issuer_id": issuer_id,
+            "account_status": "COMPROMISED",
+            "revoked_count": len(revoked_uuids),
+            "revoked_uuids": revoked_uuids,
+            "message": f"Đã khóa tài khoản Issuer (ID {issuer_id}) và thu hồi khẩn cấp {len(revoked_uuids)} văn bản."
+        })
+
     # ---------------------------------------------------------
     # Attack Lab Simulator Routes (Isolated Sandbox)
     # ---------------------------------------------------------
     @app.route("/attack-lab")
     def attack_lab():
-        recent_docs = doc_svc.list_documents(limit=10)
-        return render_template("attack_demo.html", recent_docs=recent_docs)
+        # Do not expose real database documents or recipient names to unauthenticated attack lab
+        return render_template("attack_demo.html")
 
     @app.route("/api/attack/bit-flip", methods=["POST"])
     def api_attack_bit_flip():
         """
         Simulate a Bit-Flip Tampering Attack:
-        Take a document, flip 1 byte, compute hashes, calculate Hamming distance,
-        and run verification through Zero-Trust engine.
+        Operates strictly on isolated synthetic sample data to prevent raw document leakage.
         """
-        data = request.get_json() or {}
-        doc_uuid = data.get("doc_uuid")
-        doc = doc_svc.get_document_by_uuid(doc_uuid) if doc_uuid else None
+        client_ip = request.remote_addr or "127.0.0.1"
+        if not check_simulation_rate_limit(client_ip):
+            return jsonify({
+                "error": "Too Many Requests",
+                "message": "Giới hạn tần suất gọi API mô phỏng tốn CPU (Rate limit: 10 lần/phút). Vui lòng thử lại sau."
+            }), 429
 
-        if not doc:
+        data = request.get_json(silent=True) or {}
+        sample_choice = data.get("sample_type") or data.get("doc_uuid") or ""
+
+        if sample_choice == "SAMPLE_TRANSCRIPT":
             original_bytes = (
-                b"TRUONG DAI HOC CONG NGHE THONG TIN - BANG TOT NGHIEP\n"
+                b"TRUONG DAI HOC - BANG DIEM CHINH THUC GIA LAP\n"
+                b"Sinh vien: NGUYEN VAN B - Diem GPA: 3.85 - Xep loai: GIOI\n"
+            )
+        elif sample_choice == "SAMPLE_CERTIFICATE":
+            original_bytes = (
+                b"TRUONG DAI HOC - CHUNG CHI HOAN THANH KHOA HOC GIA LAP\n"
+                b"Hoc vien: TRAN THI C - Xep loai: XUAT SAC\n"
+            )
+        else:
+            original_bytes = (
+                b"TRUONG DAI HOC CONG NGHE THONG TIN - BANG TOT NGHIEP GIA LAP\n"
                 b"Sinh vien: NGUYEN VAN A - Xep loai: XUAT SAC - Diem GPA: 3.90\n"
             )
-            original_hash = calculate_bytes_hash(original_bytes)
-        else:
-            storage_path = doc["file_storage_path"]
-            if os.path.exists(storage_path):
-                with open(storage_path, "rb") as f:
-                    original_bytes = f.read()
-            else:
-                original_bytes = f"Văn bản {doc['title']} của {doc['recipient_name']}".encode("utf-8")
-            original_hash = doc["doc_hash"]
+        original_hash = calculate_bytes_hash(original_bytes)
 
         # Flip the least significant bit of the first byte
         byte_array = bytearray(original_bytes)
@@ -413,7 +493,8 @@ def create_app(test_config=None) -> Flask:
         tamp_char = chr(tamp_byte_val) if 32 <= tamp_byte_val <= 126 else f"\\x{tamp_byte_val:02x}"
 
         # Run through verification engine
-        verdict = verify_engine.verify_document(tampered_bytes, claimed_uuid=doc_uuid if doc else None)
+        verdict = verify_engine.verify_document(tampered_bytes)
+        safe_verdict = sanitize_verify_result_for_public(verdict, is_authenticated=bool(session.get("user")))
 
         return jsonify({
             "original_hash": original_hash,
@@ -429,7 +510,7 @@ def create_app(test_config=None) -> Flask:
             "tampered_byte_hex": f"0x{tamp_byte_val:02X}",
             "tampered_byte_bin": f"{tamp_byte_val:08b}",
             "tampered_char": tamp_char,
-            "verdict": verdict
+            "verdict": safe_verdict
         })
 
     @app.route("/api/attack/forge-signature", methods=["POST"])
@@ -437,12 +518,17 @@ def create_app(test_config=None) -> Flask:
         """
         Simulate Signature Forgery:
         An attacker generates their own rogue RSA keypair and attempts to sign a legitimate document.
+        Rate limited to protect CPU against repetitive 2048-bit RSA key generation.
         """
-        data = request.get_json() or {}
-        doc_uuid = data.get("doc_uuid")
-        doc = doc_svc.get_document_by_uuid(doc_uuid) if doc_uuid else None
+        client_ip = request.remote_addr or "127.0.0.1"
+        if not check_simulation_rate_limit(client_ip):
+            return jsonify({
+                "error": "Too Many Requests",
+                "message": "Giới hạn tần suất gọi API mô phỏng tốn CPU (Rate limit: 10 lần/phút). Vui lòng thử lại sau."
+            }), 429
 
-        target_hash = doc["doc_hash"] if doc else calculate_bytes_hash(b"SAMPLE_DATA")
+        data = request.get_json(silent=True) or {}
+        target_hash = calculate_bytes_hash(b"SAMPLE_DATA_FOR_SIMULATION")
 
         # Rogue attacker generates a separate RSA keypair
         fake_private_key = rsa.generate_private_key(
@@ -519,11 +605,22 @@ def create_app(test_config=None) -> Flask:
 
     @app.route("/certificate/<doc_uuid>")
     def view_certificate(doc_uuid):
-        """Display an official verifiable digital credential with REAL scannable QR code and cryptographic proof."""
+        """Display an official verifiable digital credential with PII protection."""
         doc = doc_svc.get_document_by_uuid(doc_uuid)
         if not doc:
             flash("Không tìm thấy hồ sơ văn bản tương ứng", "danger")
             return redirect(url_for("index"))
+
+        user = session.get("user")
+        is_authorized = bool(user and (user.get("role") in ("ISSUER", "AUDITOR") or user.get("id") == doc["issuer_id"]))
+
+        # Data Minimization: If visitor is not an authorized issuer/auditor, mask recipient PII and redact internal UUID
+        display_doc = dict(doc)
+        display_doc.pop("file_storage_path", None)
+        if not is_authorized:
+            display_doc["recipient_name"] = mask_recipient_name(doc["recipient_name"])
+            raw_u = doc["doc_uuid"]
+            display_doc["doc_uuid"] = raw_u[:8] + "-****-****-****-" + raw_u[-12:]
 
         public_key_pem = key_mgr.get_public_key_pem()
         root_fingerprint = key_mgr.get_public_key_fingerprint()
@@ -534,23 +631,38 @@ def create_app(test_config=None) -> Flask:
 
         return render_template(
             "certificate.html",
-            doc=doc,
+            doc=display_doc,
             public_key_pem=public_key_pem,
             root_fingerprint=root_fingerprint,
             verify_url=verify_url,
-            qr_data_uri=qr_data_uri
+            qr_data_uri=qr_data_uri,
+            is_authorized=is_authorized
         )
 
     @app.route("/download/<doc_uuid>")
     def download_document(doc_uuid):
-        """Allow downloading the authentic binary document file (PDF, DOCX, PNG, JPG, TXT)."""
+        """Allow downloading the authentic binary document file ONLY for authenticated authorized users."""
+        user = session.get("user")
+        if not user:
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Unauthorized", "message": "Yêu cầu đăng nhập để tải tài liệu"}), 401
+            flash("Vui lòng đăng nhập để tải tài liệu gốc.", "warning")
+            return redirect(url_for("login", next=request.path))
+
         doc = doc_svc.get_document_by_uuid(doc_uuid)
         if not doc:
             abort(404)
+
+        # Authorization check: only the issuing user or an AUDITOR can download the raw file
+        if user.get("role") not in ("ISSUER", "AUDITOR") or (user.get("role") == "ISSUER" and doc["issuer_id"] != user["id"]):
+            abort(403)
+
         file_path = Path(doc["file_storage_path"])
         if not file_path.is_file():
             abort(404)
         return send_file(file_path, as_attachment=True, download_name=doc["original_filename"])
+
+    return app
 
     return app
 

@@ -104,14 +104,18 @@ class AuthService:
                 self.record_failure(ident)
                 return None
 
-            if verify_password(password, user["password_hash"], user["salt"]):
+            user_dict = dict(user)
+            if verify_password(password, user_dict["password_hash"], user_dict["salt"]):
+                if user_dict.get("status") and user_dict["status"] != "ACTIVE":
+                    raise PermissionError(f"Tài khoản '{username}' đang ở trạng thái '{user_dict['status']}' và đã bị khóa do sự cố an ninh.")
                 self.reset_failures(ident)
                 return {
-                    "id": user["id"],
-                    "username": user["username"],
-                    "full_name": user["full_name"],
-                    "role": user["role"],
-                    "created_at": user["created_at"]
+                    "id": user_dict["id"],
+                    "username": user_dict["username"],
+                    "full_name": user_dict["full_name"],
+                    "role": user_dict["role"],
+                    "status": user_dict.get("status", "ACTIVE"),
+                    "created_at": user_dict["created_at"]
                 }
 
             self.record_failure(ident)
@@ -121,9 +125,16 @@ class AuthService:
         """Fetch user by primary key ID."""
         with self.db.connection_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, username, full_name, role, created_at FROM users WHERE id = ?;", (user_id,))
+            cursor.execute("SELECT id, username, full_name, role, status, created_at FROM users WHERE id = ?;", (user_id,))
             user = cursor.fetchone()
             return dict(user) if user else None
+
+    def lock_user(self, user_id: int, status: str = "COMPROMISED") -> bool:
+        """Lock or mark a user account as compromised."""
+        with self.db.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET status = ? WHERE id = ?;", (status, user_id))
+            return cursor.rowcount > 0
 
 
 def require_role(*allowed_roles: str):

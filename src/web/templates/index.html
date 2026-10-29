@@ -303,14 +303,10 @@
           <td>{{ doc.recipient_name }}</td>
           <td><span class="user-badge" style="background: #e0f2fe; color: var(--accent-cyan); border-color: #bae6fd;">{{ doc.doc_type }}</span></td>
           <td>
-            <span class="hash-pill mono">{{ doc.doc_uuid[:8] }}... 
-              <button type="button" class="copy-btn" data-copy="{{ doc.doc_uuid }}" title="Sao chép UUID">Chép</button>
-            </span>
+            <span class="hash-pill mono">{{ doc.doc_uuid[:8] }}...</span>
           </td>
           <td>
-            <span class="hash-pill mono">{{ doc.doc_hash[:12] }}...
-              <button type="button" class="copy-btn" data-copy="{{ doc.doc_hash }}" title="Sao chép Hash">Chép</button>
-            </span>
+            <span class="hash-pill mono">{{ doc.doc_hash[:12] }}...</span>
           </td>
           <td>
             {% if doc.status == 'ACTIVE' %}
@@ -320,9 +316,13 @@
             {% endif %}
           </td>
           <td>
-            <a href="/certificate/{{ doc.doc_uuid }}" target="_blank" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem; text-decoration: none;">
-              Xem
-            </a>
+            {% if current_user and current_user.role in ['ISSUER', 'AUDITOR'] %}
+              <a href="/certificate/{{ doc.doc_uuid }}" target="_blank" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem; text-decoration: none;">
+                Xem
+              </a>
+            {% else %}
+              <span style="font-size: 0.8rem; color: var(--text-muted);">Bảo vệ PII</span>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}

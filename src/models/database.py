@@ -62,9 +62,16 @@ class DatabaseManager:
                     salt TEXT NOT NULL,
                     full_name TEXT NOT NULL,
                     role TEXT NOT NULL, -- 'ISSUER', 'AUDITOR', 'PUBLIC_VERIFIER'
+                    status TEXT NOT NULL DEFAULT 'ACTIVE', -- 'ACTIVE', 'LOCKED', 'COMPROMISED'
                     created_at TEXT NOT NULL
                 );
             """)
+
+            # Ensure status column exists in users table for existing databases
+            cursor.execute("PRAGMA table_info(users);")
+            user_cols = [row["name"] for row in cursor.fetchall()]
+            if "status" not in user_cols:
+                cursor.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'ACTIVE';")
 
             # 2. Documents Table
             cursor.execute("""

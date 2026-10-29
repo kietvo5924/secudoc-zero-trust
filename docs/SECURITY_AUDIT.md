@@ -196,7 +196,8 @@ Bộ kiểm thử tự động được mở rộng từ **27 test cases lên 45
 2. **Giới Hạn Của Sổ Cái Hash-Chain Đơn Lẻ Trước Kẻ Tấn Công Chiếm Host:**
    - Hash-chain lưu trữ trong SQLite cục bộ phát hiện được các can thiệp sửa đổi đơn lẻ vào các block quá khứ.
    - *Tuy nhiên, nếu kẻ tấn công chiếm toàn quyền kiểm soát máy chủ (Root/OS level)*, kẻ đó có thể tính toán lại toàn bộ giá trị băm từ block bị sửa đến đỉnh chuỗi (recalculation attack).
-   - Để ngăn chặn triệt để nguy cơ này trong thực tế, cần cơ chế neo đỉnh chuỗi (External Head Checkpoint Anchoring) ra bên ngoài hoặc công bố head hash định kỳ (đã được minh họa trong test case `TC-ATTACK-07`).
+   - Để ngăn chặn triệt để nguy cơ này trong thực tế, cần cơ chế neo đỉnh chuỗi (External Head Checkpoint Anchoring) ra bên ngoài hoặc công bố head hash định kỳ.
+   - *Ghi chú trung thực về triển khai:* Cơ chế kiểm tra phát hiện tính toán lại chuỗi qua checkpoint head hash hiện tại **chỉ mới được mô phỏng và kiểm chứng trong bài kiểm thử giải thuật (`TC-ATTACK-07`)**; dịch vụ neo checkpoint độc lập bên ngoài (như định kỳ đẩy head hash lên Public Blockchain / external timestamping authority) **chưa được vận hành như một dịch vụ nền thực tế trong prototype này**.
 3. **Tra cứu Trạng Thái Thu Hồi Thời Gian Thực (Freshness of Revocation):**
    - Chế độ kiểm tra mã băm phía client (Client-side Hashing) không gửi nội dung tệp nhưng vẫn phải gửi hash/UUID lên server để kiểm tra trạng thái thu hồi mới nhất.
    - Nếu thực hiện thẩm định hoàn toàn offline mà không có kết nối mạng, người thẩm định chỉ có thể kiểm tra tính toàn vẹn và chữ ký của file tại thời điểm cấp, nhưng **không thể biết văn bản đã bị thu hồi sau đó hay chưa** (trừ khi có danh sách thu hồi mang theo được ký số và có thời hạn hiệu lực).
@@ -218,7 +219,7 @@ Bộ kiểm thử tự động được mở rộng từ **27 test cases lên 45
 | **REQ-AUT-01** | Băm mật khẩu PBKDF2 & Salt ngẫu nhiên | `src/services/auth_service.py` | `hash_password`, `verify_password` | `TC-AUTH-01`, `TC-AUTH-02` | **PASS (0.35s)** |
 | **REQ-AUT-02** | Chống brute-force & Lockout | `src/services/auth_service.py` | `check_rate_limit`, `record_failure` | `TC-AUTH-04` | **PASS (0.10s)** |
 | **REQ-ATK-01** | Cô lập Sandbox DB cho Attack Lab | `src/web/app.py` | `api_attack_tamper_db`, `sandbox_audit_svc` | `TC-ATTACK-06`, `TC-WEB-07` | **PASS (0.22s)** |
-| **REQ-ATK-02** | Phát hiện tính toán lại sổ cái | `src/crypto/merkle.py` | `get_chain_head_hash` (neo checkpoint) | `TC-ATTACK-07` | **PASS (0.14s)** |
+| **REQ-ATK-02** | Phát hiện tính toán lại sổ cái | `src/crypto/merkle.py` | `get_chain_head_hash` (Mô phỏng checkpoint trong test; chưa triển khai dịch vụ neo độc lập bên ngoài) | `TC-ATTACK-07` | **PASS (0.14s)** |
 | **REQ-WEB-01** | Chống tấn công CSRF | `src/web/app.py` | `@app.before_request: enforce_csrf` | `TC-WEB-02` | **PASS (0.05s)** |
 | **REQ-WEB-02** | Chống Open Redirect | `src/web/app.py` | `is_safe_redirect` | `TC-WEB-01` | **PASS (0.02s)** |
 | **REQ-WEB-03** | Che giấu dữ liệu cá nhân (PII Masking) | `src/web/app.py` | `mask_recipient_name` | `TC-WEB-05` | **PASS (0.03s)** |

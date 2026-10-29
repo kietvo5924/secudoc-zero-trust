@@ -23,6 +23,16 @@ def sanitize_filename(filename: str) -> str:
     return cleaned if cleaned else f"document_{uuid.uuid4().hex[:8]}"
 
 
+def mask_recipient_name(name: str) -> str:
+    """Mask PII recipient names for public and unauthenticated display."""
+    parts = name.strip().split()
+    if not parts:
+        return "***"
+    if len(parts) == 1:
+        return parts[0][:1] + "***"
+    return " ".join(p[:1] + "***" for p in parts)
+
+
 class DocumentService:
     """Core service for managing document lifecycle, cryptographic sealing, and revocation."""
 
@@ -53,6 +63,15 @@ class DocumentService:
         if len(file_bytes) > MAX_CONTENT_LENGTH:
             raise ValueError(f"Dung lượng tệp vượt quá giới hạn cho phép ({MAX_CONTENT_LENGTH // (1024*1024)}MB)")
 
+        # Validate file extension against allowed whitelist
+        ext = Path(original_filename).suffix.lstrip(".").lower()
+        if not ext or ext not in ALLOWED_EXTENSIONS:
+            allowed_str = ", ".join(sorted(ALLOWED_EXTENSIONS))
+            raise ValueError(
+                f"Phần mở rộng tệp '.{ext}' không hợp lệ hoặc không được hỗ trợ! "
+                f"Hệ thống chỉ chấp nhận: {allowed_str}"
+            )
+
         clean_filename = sanitize_filename(original_filename)
         doc_uuid = str(uuid.uuid4())
         file_size = len(file_bytes)
@@ -61,14 +80,21 @@ class DocumentService:
         clean_recipient = recipient_name.strip()
         clean_doc_type = doc_type.strip()
 
-        # 1. Look up issuer identity
+        # 1. Look up issuer identity and verify account status
         issuer_name = "Cơ quan phát hành"
         with self.db.connection_context() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT full_name FROM users WHERE id = ?;", (issuer_id,))
+            cursor.execute("SELECT full_name, status FROM users WHERE id = ?;", (issuer_id,))
             row = cursor.fetchone()
-            if row and row["full_name"]:
-                issuer_name = row["full_name"]
+            if row:
+                row_dict = dict(row)
+                if row_dict.get("status") and row_dict["status"] != "ACTIVE":
+                    raise PermissionError(
+                        f"Tài khoản Issuer '{row_dict.get('full_name')}' đang ở trạng thái '{row_dict['status']}' và đã bị khóa, "
+                        f"không thể phát hành văn bản mới."
+                    )
+                if row_dict.get("full_name"):
+                    issuer_name = row_dict["full_name"]
 
         # 2. Compute SHA-256 digest of raw file bytes
         doc_hash = calculate_bytes_hash(file_bytes)
@@ -81,6 +107,7 @@ class DocumentService:
             doc_type=clean_doc_type,
             issuer_name=issuer_name,
             issued_at=now_str,
+            title=clean_title,
             version=1
         )
 
@@ -255,6 +282,8 @@ class DocumentService:
         """
         with self.db.connection_context() as conn:
             cursor = conn.cursor()
+            # Lock the compromised issuer account immediately
+            cursor.execute("UPDATE users SET status = 'COMPROMISED' WHERE id = ?;", (issuer_id,))
             cursor.execute(
                 "SELECT doc_uuid FROM documents WHERE issuer_id = ? AND status = 'ACTIVE';",
                 (issuer_id,)
