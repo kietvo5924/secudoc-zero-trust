@@ -8,17 +8,17 @@
     Thẩm Định Tính Toàn Vẹn <span style="color: var(--accent-cyan);">Văn Bản Số</span>
   </h1>
   <p style="color: var(--text-muted); max-width: 750px; margin: 0 auto; font-size: 1.1rem;">
-    Áp dụng nguyên tắc <strong style="color: #fff;">Zero-Trust</strong>: <em>"Không mặc định tin tưởng bất kỳ tệp dữ liệu nào chỉ vì nó mang con dấu hay giao diện giống thật."</em> Hệ thống xác thực bằng toán học mật mã học độc lập.
+    Áp dụng nguyên tắc <strong style="color: var(--text-main);">Zero-Trust</strong>: <em>"Không mặc định tin tưởng bất kỳ tệp dữ liệu nào chỉ vì nó mang con dấu hay giao diện giống thật."</em> Hệ thống xác thực bằng toán học mật mã học độc lập.
   </p>
 </div>
 
 <!-- Mode Switcher Tabs -->
 <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
   <button type="button" id="tabStandard" class="btn btn-primary" onclick="switchVerifyMode('standard')" style="padding: 0.6rem 1.5rem; font-size: 0.95rem;">
-    📤 Chế Độ 1: Thẩm Định Tiêu Chuẩn (Tải Tệp)
+    Chế Độ 1: Thẩm Định Tiêu Chuẩn (Tải Tệp)
   </button>
   <button type="button" id="tabPrivacy" class="btn btn-secondary" onclick="switchVerifyMode('privacy')" style="padding: 0.6rem 1.5rem; font-size: 0.95rem; border-color: var(--accent-cyan);">
-    🔒 Chế Độ 2: Thẩm Định Giảm Thiểu Dữ Liệu (Client-Side SHA-256)
+    Chế Độ 2: Thẩm Định Giảm Thiểu Dữ Liệu (Client-Side SHA-256)
   </button>
 </div>
 
@@ -30,65 +30,64 @@
     <!-- Subtle Demo Fixtures Toggle (Hidden by default for clean UI) -->
     <div style="display: flex; justify-content: flex-end; margin-bottom: 0.5rem;">
       <button type="button" id="btnToggleDemoSamples" onclick="toggleDemoSamples()" 
-        style="background: transparent; border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.28); font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 6px; cursor: pointer; transition: all 0.25s;"
-        onmouseover="this.style.color='#00f2fe'; this.style.borderColor='rgba(0, 242, 254, 0.4)'; this.style.background='rgba(0, 242, 254, 0.05)';"
-        onmouseout="this.style.color='rgba(255,255,255,0.28)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.background='transparent';"
+        style="background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; font-size: 0.78rem; font-weight: 600; padding: 0.25rem 0.65rem; border-radius: 6px; cursor: pointer; transition: all 0.2s;"
+        onmouseover="this.style.color='#0284c7'; this.style.borderColor='#0284c7'; this.style.background='#f0f9ff';"
+        onmouseout="this.style.color='#64748b'; this.style.borderColor='#cbd5e1'; this.style.background='#f8fafc';"
         title="Bấm để mở công cụ nạp nhanh tệp mẫu khi demo">
-        ⚡ Demo Fixtures ▾
+        Demo Fixtures ▾
       </button>
     </div>
 
     <!-- Hidden Demo Fixtures Container -->
-    <div id="demoSamplesContainer" style="display: none; margin-bottom: 1.25rem; background: rgba(5, 8, 17, 0.65); border: 1px solid rgba(0, 242, 254, 0.18); border-radius: 8px; padding: 0.85rem;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
-        <span style="font-size: 0.85rem; color: var(--accent-cyan); font-weight: 600;">⚡ Thử nghiệm nhanh các định dạng (Demo Mode):</span>
+    <div id="demoSamplesContainer" style="display: none; margin-bottom: 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1rem;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+        <span style="font-size: 0.85rem; color: var(--accent-cyan); font-weight: 700;">Thử nghiệm nhanh các định dạng (Demo Mode):</span>
         <span style="font-size: 0.78rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">Hỗ trợ 5 định dạng: PDF • DOCX • PNG • JPG • TXT</span>
       </div>
       <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
         <!-- PDF -->
         <button type="button" id="btnSamplePdf" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;" onclick="loadSampleFile('Bang_Tot_Nghiep_Nguyen_Van_An.pdf', '98075a9f-0a1f-4281-9a68-c773c261c6b4')" title="Văn bằng PDF gốc hợp lệ 100%">
-          📄 PDF Thật
+          PDF Thật
         </button>
-        <button type="button" id="btnSamplePdfTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #ff5252; color: #ff8a80;" onclick="loadSampleFile('Bang_Tot_Nghiep_Nguyen_Van_An_TAMPERED.pdf', '98075a9f-0a1f-4281-9a68-c773c261c6b4')" title="File PDF đã bị sửa điểm GPA lên 4.00">
-          ⚠️ PDF Sửa GPA
+        <button type="button" id="btnSamplePdfTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #fca5a5; color: #dc2626; background: #fef2f2;" onclick="loadSampleFile('Bang_Tot_Nghiep_Nguyen_Van_An_TAMPERED.pdf', '98075a9f-0a1f-4281-9a68-c773c261c6b4')" title="File PDF đã bị sửa điểm GPA lên 4.00">
+          PDF Sửa GPA
         </button>
 
         <!-- DOCX -->
         <button type="button" id="btnSampleDocx" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;" onclick="loadSampleFile('Bang_Diem_Tran_Thi_Bich.docx', '8a4d0b95-d071-44df-b5c1-c397adf6b6a3')" title="Bảng điểm Word DOCX hợp lệ">
-          📝 DOCX Thật
+          DOCX Thật
         </button>
-        <button type="button" id="btnSampleDocxTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #ff5252; color: #ff8a80;" onclick="loadSampleFile('Bang_Diem_Tran_Thi_Bich_TAMPERED.docx', '8a4d0b95-d071-44df-b5c1-c397adf6b6a3')" title="Bảng điểm DOCX bị sửa điểm">
-          ⚠️ DOCX Sửa Điểm
+        <button type="button" id="btnSampleDocxTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #fca5a5; color: #dc2626; background: #fef2f2;" onclick="loadSampleFile('Bang_Diem_Tran_Thi_Bich_TAMPERED.docx', '8a4d0b95-d071-44df-b5c1-c397adf6b6a3')" title="Bảng điểm DOCX bị sửa điểm">
+          DOCX Sửa Điểm
         </button>
 
         <!-- PNG -->
         <button type="button" id="btnSamplePng" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;" onclick="loadSampleFile('Giay_Khen_Sinh_Vien_Xuat_Sac.png', '0861efc2-68a1-4afb-81b2-014dfefc7052')" title="Giấy khen đồ họa PNG hợp lệ">
-          🖼️ PNG Giấy Khen
+          PNG Giấy Khen
         </button>
-        <button type="button" id="btnSamplePngRevoked" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #ffd740; color: #ffe57f;" onclick="loadSampleFile('Chung_Nhan_Ky_Thuat_Vien_Phuc.png', 'b2730cc1-41e7-4a2e-bdc9-42d7cf0bb922')" title="Chứng chỉ PNG đã bị thu hồi">
-          🚫 PNG Bị Thu Hồi
+        <button type="button" id="btnSamplePngRevoked" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #fde68a; color: #b45309; background: #fffbeb;" onclick="loadSampleFile('Chung_Nhan_Ky_Thuat_Vien_Phuc.png', 'b2730cc1-41e7-4a2e-bdc9-42d7cf0bb922')" title="Chứng chỉ PNG đã bị thu hồi">
+          PNG Bị Thu Hồi
         </button>
 
         <!-- JPG -->
         <button type="button" id="btnSampleJpg" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;" onclick="loadSampleFile('The_Sinh_Vien_Le_Hoang_Phuc.jpg', '5e293f24-4252-4664-907f-fc120304d0e1')" title="Thẻ sinh viên JPG hợp lệ">
-          🪪 JPG Thẻ SV
+          JPG Thẻ SV
         </button>
-        <button type="button" id="btnSampleJpgTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #ff5252; color: #ff8a80;" onclick="loadSampleFile('The_Sinh_Vien_TAMPERED.jpg', '5e293f24-4252-4664-907f-fc120304d0e1')" title="Thẻ sinh viên JPG bị làm giả">
-          ⚠️ JPG Làm Giả
+        <button type="button" id="btnSampleJpgTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #fca5a5; color: #dc2626; background: #fef2f2;" onclick="loadSampleFile('The_Sinh_Vien_TAMPERED.jpg', '5e293f24-4252-4664-907f-fc120304d0e1')" title="Thẻ sinh viên JPG bị làm giả">
+          JPG Làm Giả
         </button>
 
         <!-- TXT -->
         <button type="button" id="btnSampleTxt" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;" onclick="loadSampleFile('Bang_Tot_Nghiep_Nguyen_Van_An.txt', '19b46b12-2fde-43d8-8180-e8bc8c2f2aa9')" title="Văn bản TXT hợp lệ">
-          📄 TXT Thật
+          TXT Thật
         </button>
-        <button type="button" id="btnSampleTxtTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #ff5252; color: #ff8a80;" onclick="loadSampleFile('Bang_Tot_Nghiep_Nguyen_Van_An_TAMPERED.txt', '19b46b12-2fde-43d8-8180-e8bc8c2f2aa9')" title="Văn bản TXT bị sửa điểm">
-          ⚠️ TXT Sửa Điểm
+        <button type="button" id="btnSampleTxtTampered" class="btn btn-secondary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; border-color: #fca5a5; color: #dc2626; background: #fef2f2;" onclick="loadSampleFile('Bang_Tot_Nghiep_Nguyen_Van_An_TAMPERED.txt', '19b46b12-2fde-43d8-8180-e8bc8c2f2aa9')" title="Văn bản TXT bị sửa điểm">
+          TXT Sửa Điểm
         </button>
       </div>
     </div>
 
     <div class="dropzone" id="fileDropzone">
-      <div class="dropzone-icon">📥</div>
       <div class="dropzone-text">Kéo thả tệp văn bản cần thẩm định vào đây hoặc bấm để chọn tệp</div>
       <div class="dropzone-hint">Hỗ trợ đầy đủ định dạng: PDF, DOCX, PNG, JPG, TXT (Tối đa 10MB)</div>
       <input type="file" name="document_file" id="documentFileInput" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt" required>
@@ -110,7 +109,7 @@
 
     <div style="text-align: right; margin-top: 1.5rem;">
       <button type="submit" id="btnSubmitVerify" class="btn btn-primary" style="padding: 0.9rem 2.5rem; font-size: 1rem;">
-        🔍 Thẩm Định Toán Học Ngay Lập Tức
+        Thẩm Định Toán Học Ngay Lập Tức
       </button>
     </div>
   </form>
@@ -120,47 +119,46 @@
 <div class="glass-card" id="modePrivacyCard" style="display: none; border-left: 5px solid var(--accent-cyan);">
   <div style="margin-bottom: 1.25rem;">
     <h3 style="color: var(--accent-cyan); display: flex; align-items: center; gap: 0.5rem;">
-      <span>🔒</span> Thẩm Định Giảm Thiểu Dữ Liệu (Client-Side SHA-256 Data Minimization)
+      Thẩm Định Giảm Thiểu Dữ Liệu (Client-Side SHA-256 Data Minimization)
     </h3>
     <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.5;">
-      Nguyên tắc <strong>Giảm thiểu Dữ liệu (Data Minimization)</strong>: Trình duyệt của bạn sẽ tự tính toán mã băm SHA-256 bằng <strong>Web Crypto API</strong> trực tiếp trong bộ nhớ máy trạm. <strong style="color: #00e676;">Nội dung bytes của tệp không rời khỏi máy trạm</strong>; hệ thống chỉ gửi chuỗi hash 64 ký tự và UUID lên máy chủ để tra cứu chữ ký số và trạng thái thu hồi.
+      Nguyên tắc <strong>Giảm thiểu Dữ liệu (Data Minimization)</strong>: Trình duyệt của bạn sẽ tự tính toán mã băm SHA-256 bằng <strong>Web Crypto API</strong> trực tiếp trong bộ nhớ máy trạm. <strong style="color: var(--accent-green);">Nội dung bytes của tệp không rời khỏi máy trạm</strong>; hệ thống chỉ gửi chuỗi hash 64 ký tự và UUID lên máy chủ để tra cứu chữ ký số và trạng thái thu hồi.
     </p>
   </div>
 
     <!-- Subtle Privacy Demo Fixtures Toggle -->
     <div style="display: flex; justify-content: flex-end; margin-bottom: 0.5rem;">
       <button type="button" id="btnTogglePrivacySamples" onclick="togglePrivacySamples()" 
-        style="background: transparent; border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.28); font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 6px; cursor: pointer; transition: all 0.25s;"
-        onmouseover="this.style.color='var(--accent-cyan)'; this.style.borderColor='rgba(0, 242, 254, 0.4)'; this.style.background='rgba(0, 242, 254, 0.05)';"
-        onmouseout="this.style.color='rgba(255,255,255,0.28)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.background='transparent';"
+        style="background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; font-size: 0.78rem; font-weight: 600; padding: 0.25rem 0.65rem; border-radius: 6px; cursor: pointer; transition: all 0.2s;"
+        onmouseover="this.style.color='#0284c7'; this.style.borderColor='#0284c7'; this.style.background='#f0f9ff';"
+        onmouseout="this.style.color='#64748b'; this.style.borderColor='#cbd5e1'; this.style.background='#f8fafc';"
         title="Bấm để mở công cụ nạp nhanh tệp mẫu khi demo">
-        ⚡ Demo RAM Fixtures ▾
+        Demo RAM Fixtures ▾
       </button>
     </div>
 
     <!-- Hidden Privacy Demo Fixtures Container -->
-    <div id="privacySamplesContainer" style="display: none; margin-bottom: 1.25rem; background: rgba(5, 8, 17, 0.65); border: 1px solid rgba(0, 242, 254, 0.18); border-radius: 8px; padding: 0.85rem;">
+    <div id="privacySamplesContainer" style="display: none; margin-bottom: 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1rem;">
       <div style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
-        <span style="font-size: 0.85rem; color: var(--accent-cyan); font-weight: 600;">⚡ Thử nghiệm băm trong RAM (Demo Mode):</span>
+        <span style="font-size: 0.85rem; color: var(--accent-cyan); font-weight: 700;">Thử nghiệm băm trong RAM (Demo Mode):</span>
       </div>
       <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
         <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.65rem; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="loadPrivacySampleFile('Bang_Tot_Nghiep_Nguyen_Van_An.pdf', '98075a9f-0a1f-4281-9a68-c773c261c6b4')">
-          📄 Băm PDF
+          Băm PDF
         </button>
         <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.65rem; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="loadPrivacySampleFile('Bang_Diem_Tran_Thi_Bich.docx', '8a4d0b95-d071-44df-b5c1-c397adf6b6a3')">
-          📝 Băm DOCX
+          Băm DOCX
         </button>
         <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.65rem; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="loadPrivacySampleFile('Giay_Khen_Sinh_Vien_Xuat_Sac.png', '0861efc2-68a1-4afb-81b2-014dfefc7052')">
-          🖼️ Băm PNG
+          Băm PNG
         </button>
         <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.65rem; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="loadPrivacySampleFile('The_Sinh_Vien_Le_Hoang_Phuc.jpg', '5e293f24-4252-4664-907f-fc120304d0e1')">
-          🪪 Băm JPG
+          Băm JPG
         </button>
       </div>
     </div>
 
   <div class="dropzone" id="privacyDropzone" style="border-color: var(--accent-cyan);">
-    <div class="dropzone-icon">🛡️</div>
     <div class="dropzone-text">Chọn tệp để tính mã băm ngay trong trình duyệt (Không gửi file bytes)</div>
     <div class="dropzone-hint">Hỗ trợ đầy đủ định dạng: PDF, DOCX, PNG, JPG, TXT (Xử lý cục bộ bằng Web Crypto API)</div>
     <input type="file" id="privacyFileInput" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt">
@@ -198,14 +196,14 @@
     <div class="details-grid">
       <div class="detail-item">
         <div class="detail-label">MÃ BĂM TÍNH TOÁN CỦA TỆP TẢI LÊN (SHA-256 COMPUTED)</div>
-        <div class="detail-val mono" style="font-size: 0.8rem; color: #80d8ff;">
+        <div class="detail-val mono" style="font-size: 0.8rem; color: var(--accent-cyan);">
           {{ result.computed_hash or 'N/A' }}
         </div>
       </div>
 
       <div class="detail-item">
         <div class="detail-label">MÃ BĂM KỲ VỌNG TRONG CHỨNG THỰC (EXPECTED HASH)</div>
-        <div class="detail-val mono" style="font-size: 0.8rem; color: #b388ff;">
+        <div class="detail-val mono" style="font-size: 0.8rem; color: var(--accent-purple);">
           {{ result.expected_hash or 'KHÔNG TÌM THẤY TRONG HỆ THỐNG' }}
         </div>
       </div>
@@ -214,9 +212,9 @@
         <div class="detail-label">XÁC MINH CHỮ KÝ SỐ RSA-2048</div>
         <div class="detail-val">
           {% if result.signature_valid %}
-            <span style="color: var(--accent-green);">✓ HỢP LỆ (Signed by Root Key)</span>
+            <span style="color: var(--accent-green); font-weight: 700;">HỢP LỆ (Signed by Root Key)</span>
           {% else %}
-            <span style="color: var(--accent-red);">✗ KHÔNG HỢP LỆ / BỊ LÀM GIẢ</span>
+            <span style="color: var(--accent-red); font-weight: 700;">KHÔNG HỢP LỆ / BỊ LÀM GIẢ</span>
           {% endif %}
         </div>
       </div>
@@ -226,9 +224,9 @@
         <div class="detail-val">
           {% if result.document %}
             {% if result.document.status == 'ACTIVE' %}
-              <span style="color: var(--accent-green); font-weight: 700;">● ĐANG CÓ HIỆU LỰC</span>
+              <span style="color: var(--accent-green); font-weight: 700;">ĐANG CÓ HIỆU LỰC</span>
             {% else %}
-              <span style="color: var(--accent-red); font-weight: 700;">● ĐÃ BỊ THU HỒI (REVOKED)</span>
+              <span style="color: var(--accent-red); font-weight: 700;">ĐÃ BỊ THU HỒI (REVOKED)</span>
             {% endif %}
           {% else %}
             <span style="color: var(--text-muted);">KHÔNG XÁC ĐỊNH</span>
@@ -238,7 +236,7 @@
     </div>
 
     {% if result.document %}
-      <div style="margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+      <div style="margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--border-color);">
         <h4 style="margin-bottom: 0.75rem; color: var(--accent-cyan);">THÔNG TIN HỒ SƠ VĂN BẢN ĐÃ CẤP:</h4>
         <div class="details-grid">
           <div class="detail-item">
@@ -267,7 +265,7 @@
           </div>
           <div class="detail-item" style="grid-column: 1 / -1; margin-top: 0.75rem; text-align: right;">
             <a href="/certificate/{{ result.document.doc_uuid }}" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; padding: 0.6rem 1.25rem;">
-              📜 Mở Phiếu Chứng Thực Số & Quét QR Code
+              Mở Phiếu Chứng Thực Số & Quét QR Code
             </a>
           </div>
         </div>
@@ -281,7 +279,7 @@
 {% if recent_docs %}
 <div class="glass-card" style="margin-top: 2rem;">
   <div class="card-header">
-    <h3>📋 Các Văn Bản Mẫu Đã Phát Hành Gần Đây Trong Hệ Thống</h3>
+    <h3>Các Văn Bản Mẫu Đã Phát Hành Gần Đây Trong Hệ Thống</h3>
     <span style="color: var(--text-muted); font-size: 0.85rem;">Dùng để đối soát hoặc sao chép UUID kiểm tra</span>
   </div>
 
@@ -303,27 +301,27 @@
         <tr>
           <td><strong>{{ doc.title }}</strong></td>
           <td>{{ doc.recipient_name }}</td>
-          <td><span class="user-badge" style="background: rgba(0, 229, 255, 0.1); color: var(--accent-cyan); border-color: rgba(0, 229, 255, 0.2);">{{ doc.doc_type }}</span></td>
+          <td><span class="user-badge" style="background: #e0f2fe; color: var(--accent-cyan); border-color: #bae6fd;">{{ doc.doc_type }}</span></td>
           <td>
             <span class="hash-pill mono">{{ doc.doc_uuid[:8] }}... 
-              <button type="button" class="copy-btn" data-copy="{{ doc.doc_uuid }}" title="Sao chép UUID">📋</button>
+              <button type="button" class="copy-btn" data-copy="{{ doc.doc_uuid }}" title="Sao chép UUID">Chép</button>
             </span>
           </td>
           <td>
             <span class="hash-pill mono">{{ doc.doc_hash[:12] }}...
-              <button type="button" class="copy-btn" data-copy="{{ doc.doc_hash }}" title="Sao chép Hash">📋</button>
+              <button type="button" class="copy-btn" data-copy="{{ doc.doc_hash }}" title="Sao chép Hash">Chép</button>
             </span>
           </td>
           <td>
             {% if doc.status == 'ACTIVE' %}
-              <span style="color: var(--accent-green); font-weight: 700;">● Có hiệu lực</span>
+              <span style="color: var(--accent-green); font-weight: 700;">Có hiệu lực</span>
             {% else %}
-              <span style="color: var(--accent-red); font-weight: 700;">● Đã thu hồi</span>
+              <span style="color: var(--accent-red); font-weight: 700;">Đã thu hồi</span>
             {% endif %}
           </td>
           <td>
             <a href="/certificate/{{ doc.doc_uuid }}" target="_blank" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem; text-decoration: none;">
-              📜 Xem
+              Xem
             </a>
           </td>
         </tr>

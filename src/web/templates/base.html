@@ -13,15 +13,15 @@
 <body>
 
   {% if demo_mode %}
-  <div style="background: rgba(255, 145, 0, 0.15); border-bottom: 1px solid rgba(255, 145, 0, 0.4); color: #ffb74d; text-align: center; padding: 0.45rem 1rem; font-size: 0.82rem; font-weight: 600;">
-    ⚠️ CHẾ ĐỘ DEMO NỘI BỘ (DEMO_MODE) — Dành riêng cho học tập & nghiên cứu đồ án môn Bảo mật mạng máy tính và hệ thống. Không sử dụng cho dữ liệu văn bằng thực tế!
+  <div style="background: #fffbeb; border-bottom: 1px solid #fde68a; color: #b45309; text-align: center; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600;">
+    CHẾ ĐỘ DEMO NỘI BỘ (DEMO_MODE) — Dành riêng cho học tập & nghiên cứu đồ án môn Bảo mật mạng máy tính và hệ thống. Không sử dụng cho dữ liệu văn bằng thực tế!
   </div>
   {% endif %}
 
   <!-- Navigation Bar -->
   <header class="navbar">
     <a href="{{ url_for('index') }}" class="nav-brand">
-      <span style="color: var(--accent-cyan);">🛡️ SecuDoc</span>
+      <span style="color: var(--accent-cyan);">SecuDoc</span>
       <span class="brand-badge">Zero-Trust</span>
     </a>
 
@@ -31,7 +31,7 @@
       </li>
 
       <li class="nav-item">
-        <a href="{{ url_for('attack_lab') }}" class="{% if request.endpoint == 'attack_lab' %}active{% endif %}">Attack Lab ⚡</a>
+        <a href="{{ url_for('attack_lab') }}" class="{% if request.endpoint == 'attack_lab' %}active{% endif %}">Attack Lab</a>
       </li>
 
       {% if current_user %}

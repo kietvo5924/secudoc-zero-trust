@@ -12,7 +12,7 @@
   </div>
   <div>
     <button type="button" class="btn btn-primary" onclick="runLiveAuditCheck()">
-      ⚡ Quét Toán Học Chuỗi Khối
+      Quét Toán Học Chuỗi Khối
     </button>
   </div>
 </div>
@@ -20,11 +20,11 @@
 <div id="auditLiveResult">
   {% if verification.is_valid %}
     <div class="alert alert-success">
-      <strong>✓ TOÀN BỘ SỔ CÁI TOÀN VẸN:</strong> {{ verification.message }}
+      <strong>TOÀN BỘ SỔ CÁI TOÀN VẸN:</strong> {{ verification.message }}
     </div>
   {% else %}
     <div class="alert alert-danger">
-      <strong>🚨 PHÁT HIỆN CAN THIỆP SỔ CÁI:</strong> {{ verification.message }}
+      <strong>PHÁT HIỆN CAN THIỆP SỔ CÁI:</strong> {{ verification.message }}
     </div>
   {% endif %}
 </div>
@@ -56,16 +56,16 @@
           <td><strong style="color: var(--accent-cyan);">#{{ b.block_index }}</strong></td>
           <td>
             {% if b.action == 'GENESIS' %}
-              <span class="user-badge" style="background: rgba(124, 77, 255, 0.2); color: #b388ff; border-color: rgba(124, 77, 255, 0.4);">GENESIS</span>
+              <span class="user-badge" style="background: #f5f3ff; color: #7c3aed; border-color: #ddd6fe;">GENESIS</span>
             {% elif b.action == 'ISSUE' %}
-              <span class="user-badge" style="background: rgba(0, 230, 118, 0.2); color: var(--accent-green); border-color: rgba(0, 230, 118, 0.4);">ISSUE</span>
+              <span class="user-badge" style="background: #f0fdf4; color: var(--accent-green); border-color: #bbf7d0;">ISSUE</span>
             {% else %}
-              <span class="user-badge" style="background: rgba(255, 23, 68, 0.2); color: var(--accent-red); border-color: rgba(255, 23, 68, 0.4);">REVOKE</span>
+              <span class="user-badge" style="background: #fef2f2; color: var(--accent-red); border-color: #fecaca;">REVOKE</span>
             {% endif %}
           </td>
           <td><small class="mono">{{ b.timestamp }}</small></td>
           <td><span class="hash-pill mono">{{ b.doc_uuid[:8] }}...</span></td>
-          <td><span class="hash-pill mono" style="color: #b0bec5;">{{ b.prev_block_hash[:12] }}...</span></td>
+          <td><span class="hash-pill mono" style="color: var(--text-dim);">{{ b.prev_block_hash[:12] }}...</span></td>
           <td><span class="hash-pill mono" style="color: var(--accent-cyan); font-weight: 700;">{{ b.block_hash[:12] }}...</span></td>
         </tr>
         {% endfor %}
@@ -77,17 +77,17 @@
 <!-- Interactive Internal Threat Simulation Card -->
 <div class="glass-card" style="border: 1px dashed var(--accent-red); margin-top: 2rem;">
   <h3 style="color: var(--accent-red); margin-bottom: 0.75rem;">
-    🧪 Thử Nghiệm Mô Phỏng: Kẻ Gian Nội Bộ Sửa Trực Tiếp Database SQLite
+    Thử Nghiệm Mô Phỏng: Kẻ Gian Nội Bộ Sửa Trực Tiếp Database SQLite
   </h3>
   <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">
     Nếu một người quản trị biến chất dùng công cụ DB Browser sửa đổi trường dữ liệu của Block 0 nhằm ngụy tạo lịch sử, chuỗi liên kết sẽ lập tức đứt gãy.
   </p>
   <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
     <button type="button" class="btn btn-danger" onclick="runDatabaseTamper(0)">
-      💥 Can Thiệp Sửa Lén Block 0 & Kiểm Toán Lại
+      Can Thiệp Sửa Lén Block 0 & Kiểm Toán Lại
     </button>
     <button type="button" class="btn btn-secondary" onclick="runRestoreDatabase(0)">
-      🔄 Khôi Phục Dữ Liệu Gốc (Self-Healing Revert)
+      Khôi Phục Dữ Liệu Gốc (Self-Healing Revert)
     </button>
   </div>
 </div>

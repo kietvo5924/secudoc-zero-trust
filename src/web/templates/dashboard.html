@@ -17,8 +17,8 @@
 
 <!-- Issue New Document Card -->
 <div class="glass-card">
-  <h3 style="margin-bottom: 1.25rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 0.5rem;">
-    <span>✍️</span> Phát Hành & Ký Số Văn Bản Mới
+  <h3 style="margin-bottom: 1.25rem; color: var(--accent-cyan);">
+    Phát Hành & Ký Số Văn Bản Mới
   </h3>
 
   <form action="{{ url_for('issue_document') }}" method="POST" enctype="multipart/form-data">
@@ -51,7 +51,7 @@
 
       <div class="form-group">
         <label class="form-label" for="docType">Loại văn bản *</label>
-        <select id="docType" name="doc_type" class="form-control" style="background: #080c16;">
+        <select id="docType" name="doc_type" class="form-control">
           <option value="DIPLOMA">Bằng Tốt Nghiệp / Cử Nhân (DIPLOMA)</option>
           <option value="TRANSCRIPT">Bảng Điểm Học Tập (TRANSCRIPT)</option>
           <option value="CERTIFICATE">Chứng Chỉ Năng Lực (CERTIFICATE)</option>
@@ -70,7 +70,7 @@
 
     <div style="text-align: right; margin-top: 1.5rem;">
       <button type="submit" class="btn btn-primary">
-        🔏 Ký Số RSA-2048 & Đóng Block Sổ Cái
+        Ký Số RSA-2048 & Đóng Block Sổ Cái
       </button>
     </div>
   </form>
@@ -107,27 +107,27 @@
             <td><span class="user-badge">{{ doc.doc_type }}</span></td>
             <td>
               <span class="hash-pill mono">{{ doc.doc_uuid[:8] }}... 
-                <button type="button" class="copy-btn" data-copy="{{ doc.doc_uuid }}" title="Sao chép UUID">📋</button>
+                <button type="button" class="copy-btn" data-copy="{{ doc.doc_uuid }}" title="Sao chép UUID">Chép</button>
               </span>
             </td>
             <td>
               <span class="hash-pill mono">{{ doc.doc_hash[:12] }}...
-                <button type="button" class="copy-btn" data-copy="{{ doc.doc_hash }}" title="Sao chép Hash">📋</button>
+                <button type="button" class="copy-btn" data-copy="{{ doc.doc_hash }}" title="Sao chép Hash">Chép</button>
               </span>
             </td>
             <td>
               {% if doc.status == 'ACTIVE' %}
-                <span style="color: var(--accent-green); font-weight: 700;">● Có hiệu lực</span>
+                <span style="color: var(--accent-green); font-weight: 700;">Có hiệu lực</span>
               {% else %}
-                <span style="color: var(--accent-red); font-weight: 700;">● Đã thu hồi</span>
+                <span style="color: var(--accent-red); font-weight: 700;">Đã thu hồi</span>
               {% endif %}
             </td>
             <td style="white-space: nowrap;">
               <a href="{{ url_for('view_certificate', doc_uuid=doc.doc_uuid) }}" target="_blank" class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.8rem; text-decoration: none; display: inline-block; margin-right: 0.25rem;">
-                📜 Phiếu Số
+                Phiếu Số
               </a>
               <a href="{{ url_for('download_document', doc_uuid=doc.doc_uuid) }}" class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.8rem; text-decoration: none; display: inline-block; margin-right: 0.25rem;" title="Tải tệp gốc đã ký số">
-                📥 Tải Tệp
+                Tải Tệp
               </a>
               {% if doc.status == 'ACTIVE' %}
                 <form action="{{ url_for('revoke_document', doc_uuid=doc.doc_uuid) }}" method="POST" style="display: inline-block;" onsubmit="return confirm('Bạn có chắc chắn muốn THU HỒI văn bản này không? Thao tác này sẽ đóng một block thu hồi vào sổ cái và không thể hoàn tác!');">
