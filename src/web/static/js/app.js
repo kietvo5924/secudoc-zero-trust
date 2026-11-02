@@ -539,5 +539,118 @@ function togglePrivacySamples() {
   }
 }
 
+/**
+ * Create Signed Checkpoint
+ */
+async function createSignedCheckpoint() {
+  const resultDiv = document.getElementById("checkpointActionResult");
+  if (!resultDiv) return;
 
+  resultDiv.innerHTML = '<span style="color: var(--accent-cyan);">Đang tính toán mốc khối và ký số Checkpoint với Root Private Key...</span>';
 
+  try {
+    const res = await fetch("/api/audit/checkpoint/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() }
+    });
+    const data = await res.json();
+    if (res.ok) {
+      resultDiv.innerHTML = `
+        <div class="alert alert-success" style="margin-top: 1rem;">
+          <strong>ĐÃ TẠO VÀ KÝ SỐ CHECKPOINT THÀNH CÔNG:</strong> ${data.message}
+          <div style="margin-top: 0.5rem; font-size: 0.85rem;" class="mono">
+            Mốc khối: #${data.checkpoint.last_block_index} | Mã băm: ${data.checkpoint.last_block_hash.substring(0, 20)}... | Khóa ký: ${data.checkpoint.root_key_fingerprint.substring(0, 16)}...
+          </div>
+          <div style="margin-top: 0.75rem;">
+            <a href="/api/audit/checkpoint/download" class="btn btn-secondary" style="font-size: 0.85rem;">
+              Tải Bản Checkpoint Độc Lập (.json)
+            </a>
+          </div>
+        </div>
+      `;
+      setTimeout(() => window.location.reload(), 2500);
+    } else {
+      resultDiv.innerHTML = `<div class="alert alert-danger" style="margin-top: 1rem;">Lỗi tạo Checkpoint: ${data.message}</div>`;
+    }
+  } catch (err) {
+    resultDiv.innerHTML = `<div class="alert alert-danger" style="margin-top: 1rem;">Lỗi kết nối: ${err.message}</div>`;
+  }
+}
+
+/**
+ * Verify Live Ledger Against Signed Checkpoint
+ */
+async function verifySignedCheckpoint() {
+  const resultDiv = document.getElementById("checkpointActionResult");
+  if (!resultDiv) return;
+
+  resultDiv.innerHTML = '<span style="color: var(--accent-cyan);">Đang đối soát sổ cái với mốc Signed Checkpoint đã ký...</span>';
+
+  try {
+    const res = await fetch("/api/audit/checkpoint/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() }
+    });
+    const data = await res.json();
+
+    if (data.is_valid) {
+      resultDiv.innerHTML = `
+        <div class="alert alert-success" style="margin-top: 1rem;">
+          <strong>XÁC MINH CHECKPOINT HỢP LỆ:</strong> ${data.message}
+          <div style="margin-top: 0.5rem; font-size: 0.85rem;" class="mono">
+            Checkpoint #${data.checkpoint_sequence} | Khối: ${data.block_index} | Mã băm khớp hoàn toàn: ${data.actual_hash ? data.actual_hash.substring(0, 24) : ''}...
+          </div>
+        </div>
+      `;
+    } else {
+      resultDiv.innerHTML = `
+        <div class="alert alert-danger" style="margin-top: 1rem;">
+          <strong>CẢNH BÁO CAN THIỆP SỔ CÁI (${data.status}):</strong> ${data.message}
+          ${data.expected_hash ? `<div style="margin-top: 0.5rem; font-size: 0.85rem;" class="mono">Hash kỳ vọng trong Checkpoint: ${data.expected_hash.substring(0, 24)}...<br>Hash thực tế trong Database: ${data.actual_hash ? data.actual_hash.substring(0, 24) : 'N/A'}...</div>` : ''}
+        </div>
+      `;
+    }
+  } catch (err) {
+    resultDiv.innerHTML = `<div class="alert alert-danger" style="margin-top: 1rem;">Lỗi đối soát: ${err.message}</div>`;
+  }
+}
+
+/**
+ * Attack Lab: Full-Chain Rewrite Attack Simulation
+ */
+async function runFullChainRewriteAttack() {
+  const resultDiv = document.getElementById("rewriteAttackResult");
+  if (!resultDiv) return;
+
+  resultDiv.innerHTML = '<span style="color: var(--accent-red);">Đang tiến hành sửa đổi Block 1 và tính lại toàn bộ hash chuỗi phía sau trong Sandbox...</span>';
+
+  try {
+    const res = await fetch("/api/attack/rewrite-chain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() }
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      resultDiv.innerHTML = `
+        <div class="alert alert-danger" style="margin-top: 1rem;">
+          <h4 style="margin-bottom: 0.5rem; color: var(--accent-red);">ĐÃ THỰC THI TẤN CÔNG VIẾT LẠI TOÀN BỘ SỔ CÁI</h4>
+          <p style="font-size: 0.9rem; margin-bottom: 0.75rem;">${data.educational_insight}</p>
+          
+          <div style="background: #ffffff; padding: 0.75rem; border-radius: 4px; border: 1px solid #e2e8f0; margin-bottom: 0.75rem; font-size: 0.85rem;">
+            <div><strong>1. Kiểm tra Hash Chain nội bộ:</strong> <span style="color: var(--accent-green); font-weight: bold;">HỢP LỆ (Bị đánh lừa)</span> - ${data.internal_chain_verification.message}</div>
+            <div style="margin-top: 0.25rem;"><strong>2. Kiểm tra Signed Checkpoint độc lập:</strong> <span style="color: var(--accent-red); font-weight: bold;">PHÁT HIỆN CAN THIỆP (${data.signed_checkpoint_verification.status})</span> - ${data.signed_checkpoint_verification.message}</div>
+          </div>
+          
+          <button type="button" class="btn btn-secondary" onclick="runRestoreDatabase(1)" style="font-size: 0.85rem;">
+            Khôi Phục Sandbox Về Trạng Thái Gốc
+          </button>
+        </div>
+      `;
+    } else {
+      resultDiv.innerHTML = `<div class="alert alert-danger" style="margin-top: 1rem;">${data.message || 'Lỗi thực thi'}</div>`;
+    }
+  } catch (err) {
+    resultDiv.innerHTML = `<div class="alert alert-danger" style="margin-top: 1rem;">Lỗi kết nối: ${err.message}</div>`;
+  }
+}

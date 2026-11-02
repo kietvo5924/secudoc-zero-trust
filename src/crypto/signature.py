@@ -7,7 +7,8 @@ import json
 import hashlib
 from typing import Any
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 
 
@@ -47,11 +48,21 @@ def compute_payload_digest(payload: dict[str, Any]) -> str:
     return hashlib.sha256(serialize_canonical_payload(payload)).hexdigest()
 
 
-def sign_hash(private_key: rsa.RSAPrivateKey, hash_hex: str) -> str:
+def sign_hash(key_or_hash: Any, hash_or_key: Any) -> str:
     """
-    Sign a SHA-256 hexadecimal hash string using the RSA private key.
+    Sign a SHA-256 hexadecimal hash string using the RSA private key (object or PEM bytes/str).
+    Supports either (private_key, hash_hex) or (hash_hex, private_key).
     Returns: Signature encoded as a hexadecimal string.
     """
+    if isinstance(key_or_hash, str) and not key_or_hash.startswith("-----BEGIN"):
+        hash_hex, private_key = key_or_hash, hash_or_key
+    else:
+        private_key, hash_hex = key_or_hash, hash_or_key
+
+    if isinstance(private_key, (str, bytes)):
+        pem_bytes = private_key.encode("utf-8") if isinstance(private_key, str) else private_key
+        private_key = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
+
     message_bytes = hash_hex.encode("utf-8")
     signature = private_key.sign(
         message_bytes,
@@ -67,11 +78,22 @@ def sign_canonical_payload(private_key: rsa.RSAPrivateKey, payload: dict[str, An
     return sign_hash(private_key, digest)
 
 
-def verify_signature(public_key: rsa.RSAPublicKey, hash_hex: str, signature_hex: str) -> bool:
+def verify_signature(key_or_hash: Any, hash_or_key: Any, signature_hex: str) -> bool:
     """
     Verify whether a hexadecimal RSA signature matches the given hash string.
+    Accepts public_key as RSAPublicKey object or PEM bytes/str.
+    Supports either (public_key, hash_hex, sig) or (hash_hex, public_key, sig).
     Returns: True if valid; False if forged, corrupted, or signed by another key.
     """
+    if isinstance(key_or_hash, str) and not key_or_hash.startswith("-----BEGIN"):
+        hash_hex, public_key = key_or_hash, hash_or_key
+    else:
+        public_key, hash_hex = key_or_hash, hash_or_key
+
+    if isinstance(public_key, (str, bytes)):
+        pem_bytes = public_key.encode("utf-8") if isinstance(public_key, str) else public_key
+        public_key = serialization.load_pem_public_key(pem_bytes, backend=default_backend())
+
     try:
         signature_bytes = bytes.fromhex(signature_hex)
         message_bytes = hash_hex.encode("utf-8")

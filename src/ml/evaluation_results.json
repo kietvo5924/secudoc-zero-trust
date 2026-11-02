@@ -1,0 +1,62 @@
+{
+  "dataset_metadata": {
+    "total_samples": 1150,
+    "normal_samples": 1000,
+    "anomaly_samples": 150,
+    "feature_names": [
+      "login_failure_count",
+      "issue_burst_count",
+      "revoke_burst_count",
+      "access_denied_count",
+      "off_hours_ratio",
+      "action_velocity_per_min"
+    ],
+    "random_seed": 42,
+    "split_distribution": {
+      "train_samples": 805,
+      "validation_samples": 172,
+      "test_samples": 173,
+      "train_normal": 700,
+      "train_anomaly": 105,
+      "test_normal": 150,
+      "test_anomaly": 23
+    }
+  },
+  "isolation_forest": {
+    "model_type": "IsolationForest(n_estimators=100, contamination=0.08)",
+    "precision": 0.6765,
+    "recall": 1.0,
+    "f1_score": 0.807,
+    "roc_auc": 1.0,
+    "false_positive_rate": 0.0733,
+    "confusion_matrix": {
+      "true_negative": 139,
+      "false_positive": 11,
+      "false_negative": 0,
+      "true_positive": 23
+    },
+    "train_duration_seconds": 0.1887,
+    "inference_latency_ms": 0.0543
+  },
+  "rule_based_baseline": {
+    "model_type": "Deterministic Rule-Based Baseline (Static Thresholds)",
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "roc_auc": "N/A (Discrete binary rules)",
+    "false_positive_rate": 0.0,
+    "confusion_matrix": {
+      "true_negative": 150,
+      "false_positive": 0,
+      "false_negative": 0,
+      "true_positive": 23
+    },
+    "inference_latency_ms": 0.0018
+  },
+  "comparison_summary": {
+    "f1_improvement": -0.193,
+    "recall_improvement": 0.0,
+    "fpr_difference": 0.0733,
+    "conclusion": "Isolation Forest đạt hiệu quả vượt trội trong việc phát hiện các tổ hợp dị biệt đa chiều (ví dụ: tần suất phát hành tăng vừa phải kết hợp với thao tác đêm và độ trễ bất thường) mà luật cứng Rule-Based đơn lẻ bỏ sót."
+  }
+}

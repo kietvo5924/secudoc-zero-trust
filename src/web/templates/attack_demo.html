@@ -94,4 +94,26 @@
     </div>
   </div>
 </div>
+
+<!-- Attack Scenario 5: Full-Chain Rewrite Attack -->
+<div class="glass-card" style="border-left: 5px solid var(--accent-red); margin-top: 1.5rem;">
+  <div class="card-header">
+    <div>
+      <h3 style="color: var(--accent-red); margin-bottom: 0.25rem;">
+        Kịch Bản 5: Tấn Công Sửa Database & Viết Lại Toàn Bộ Chuỗi Sổ Cái (Full-Chain Rewrite Attack)
+      </h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">
+        Kẻ gian có toàn quyền truy cập cơ sở dữ liệu SQLite, sửa Block 1 và tính lại hash toàn bộ các block tiếp theo để qua mặt Hash Chain nội bộ. Chỉ có Signed Checkpoint độc lập mới phát hiện được!
+      </p>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+    <button type="button" class="btn btn-danger" onclick="runFullChainRewriteAttack()">
+      Thực Thi Tấn Công Viết Lại Chuỗi & Kiểm Chứng Phòng Thủ
+    </button>
+  </div>
+
+  <div id="rewriteAttackResult"></div>
+</div>
 {% endblock %}

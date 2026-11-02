@@ -113,20 +113,38 @@ class KeyManager:
             self.load_keys()
         return self._public_key
 
-    def get_public_key_pem(self) -> str:
-        """Return the public key serialized as a UTF-8 PEM string."""
+    def get_private_key_pem(self) -> bytes:
+        """Return private key serialized as PKCS#8 PEM bytes."""
+        return self.get_private_key().private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+
+    def get_public_key_pem(self, as_bytes: bool = False) -> str | bytes:
+        """Return the public key serialized as a UTF-8 PEM string or raw bytes."""
         pub_bytes = self.get_public_key().public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
-        return pub_bytes.decode("utf-8")
+        return pub_bytes if as_bytes else pub_bytes.decode("utf-8")
 
-    def get_public_key_fingerprint(self) -> str:
+    def get_public_key_fingerprint(self, pub_key_input: str | bytes | rsa.RSAPublicKey | None = None) -> str:
         """Compute the SHA-256 fingerprint of the SubjectPublicKeyInfo DER encoding.
 
         Returns formatted fingerprint string: 'SHA256:XX:XX:...' for local root trust verification.
         """
-        der_bytes = self.get_public_key().public_bytes(
+        if pub_key_input is None:
+            pub_key = self.get_public_key()
+        elif isinstance(pub_key_input, rsa.RSAPublicKey):
+            pub_key = pub_key_input
+        elif isinstance(pub_key_input, (str, bytes)):
+            pem_bytes = pub_key_input.encode("utf-8") if isinstance(pub_key_input, str) else pub_key_input
+            pub_key = serialization.load_pem_public_key(pem_bytes, backend=default_backend())
+        else:
+            pub_key = self.get_public_key()
+
+        der_bytes = pub_key.public_bytes(
             encoding=serialization.Encoding.DER,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )

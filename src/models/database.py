@@ -122,6 +122,51 @@ class DatabaseManager:
                 );
             """)
 
+            # 5. Security Events Table (Security Behavior Analytics)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS security_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT UNIQUE NOT NULL,
+                    user_id INTEGER,
+                    username TEXT,
+                    event_type TEXT NOT NULL, -- 'AUTH_LOGIN_SUCCESS', 'AUTH_LOGIN_FAIL', 'DOC_ISSUE', 'DOC_REVOKE', 'ACCESS_DENIED', 'SENSITIVE_ENDPOINT'
+                    status TEXT NOT NULL, -- 'SUCCESS', 'FAILURE', 'WARNING'
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    response_time_ms REAL DEFAULT 0.0,
+                    created_at TEXT NOT NULL,
+                    metadata TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                );
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sec_events_user ON security_events(user_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sec_events_created ON security_events(created_at);")
+
+            # 6. Checkpoints Table (Signed Checkpoints)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS checkpoints (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sequence INTEGER UNIQUE NOT NULL,
+                    last_block_index INTEGER NOT NULL,
+                    total_blocks INTEGER NOT NULL,
+                    last_block_hash TEXT NOT NULL,
+                    checkpoint_hash TEXT,
+                    prev_checkpoint_hash TEXT,
+                    root_key_fingerprint TEXT NOT NULL,
+                    signature TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    created_by INTEGER,
+                    checkpoint_json TEXT NOT NULL,
+                    FOREIGN KEY (created_by) REFERENCES users(id)
+                );
+            """)
+
+            # Ensure checkpoint_hash column exists in checkpoints table for existing databases
+            cursor.execute("PRAGMA table_info(checkpoints);")
+            cp_cols = [row["name"] for row in cursor.fetchall()]
+            if "checkpoint_hash" not in cp_cols:
+                cursor.execute("ALTER TABLE checkpoints ADD COLUMN checkpoint_hash TEXT;")
+
         # Seed initial data
         self.seed_default_users()
         self.ensure_genesis_block()

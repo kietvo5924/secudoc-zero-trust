@@ -33,6 +33,42 @@ def mask_recipient_name(name: str) -> str:
     return " ".join(p[:1] + "***" for p in parts)
 
 
+
+class IncidentRevokeResult(list):
+    """
+    Structured incident response result that acts as a list of revoked UUIDs
+    for backward compatibility with older tests/callers, while supporting dict-style
+    metadata access for auditing and API endpoints.
+    """
+    def __init__(self, revoked_uuids: list[str], **kwargs):
+        super().__init__(revoked_uuids)
+        self.status = kwargs.get("status", "INCIDENT_RESOLVED")
+        self.issuer_id = kwargs.get("issuer_id")
+        self.issuer_username = kwargs.get("issuer_username")
+        self.account_status = kwargs.get("account_status", "COMPROMISED")
+        self.revoked_count = len(revoked_uuids)
+        self.revoked_uuids = revoked_uuids
+        self.failed_count = kwargs.get("failed_count", 0)
+        self.failed_uuids = kwargs.get("failed_uuids", [])
+        self._meta = {
+            "status": self.status,
+            "issuer_id": self.issuer_id,
+            "issuer_username": self.issuer_username,
+            "account_status": self.account_status,
+            "revoked_count": self.revoked_count,
+            "revoked_uuids": self.revoked_uuids,
+            "failed_count": self.failed_count,
+            "failed_uuids": self.failed_uuids
+        }
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self._meta[key]
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        return self._meta.get(key, default)
+
 class DocumentService:
     """Core service for managing document lifecycle, cryptographic sealing, and revocation."""
 
@@ -171,15 +207,24 @@ class DocumentService:
     def revoke_document(self, doc_uuid: str, revoked_by: int, reason: str) -> dict[str, Any]:
         """
         Revoke an active document:
-        1. Set status = 'REVOKED'.
-        2. Insert record in revocations table.
-        3. Append a REVOKE block to the audit hash chain.
+        1. Verify caller authorization: ISSUER can only revoke their own documents.
+        2. Set status = 'REVOKED'.
+        3. Insert record in revocations table.
+        4. Append a REVOKE block to the audit hash chain.
         """
         doc = self.get_document_by_uuid(doc_uuid)
         if not doc:
             raise ValueError(f"Không tìm thấy tài liệu có UUID: {doc_uuid}")
         if doc["status"] == "REVOKED":
             raise ValueError("Tài liệu này đã bị thu hồi trước đó")
+
+        # Least Privilege: Verify issuer ownership
+        with self.db.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT role FROM users WHERE id = ?;", (revoked_by,))
+            u_row = cursor.fetchone()
+            if u_row and u_row["role"] == "ISSUER" and doc["issuer_id"] != revoked_by:
+                raise PermissionError("Issuer không có quyền thu hồi tài liệu của cơ quan phát hành khác.")
 
         now_str = datetime.now(timezone.utc).isoformat()
         reason_clean = reason.strip() or "Thu hồi theo quyết định của cơ quan phát hành"
@@ -273,32 +318,97 @@ class DocumentService:
                 """, (limit,))
             return [dict(r) for r in cursor.fetchall()]
 
-    def emergency_batch_revoke(self, issuer_id: int, reason: str, revoked_by: int) -> list[str]:
+    def emergency_batch_revoke(self, issuer_id: int, reason: str, revoked_by: int) -> dict[str, Any]:
         """
         Emergency Incident Response:
-        When an issuer account is compromised, batch-revoke all active documents issued by this account
-        and cryptographically seal each revocation into the immutable audit hash-chain.
-        Returns the list of revoked document UUIDs.
+        When an issuer account is compromised:
+        1. Validate target account existence and strictly verify its role is 'ISSUER'.
+           Rejects attempts to compromise AUDITOR or PUBLIC_VERIFIER accounts.
+        2. Lock the target account with status = 'COMPROMISED'.
+        3. Inventory and atomically batch-revoke all 'ACTIVE' documents issued by this account.
+        4. Append cryptographic audit blocks for each revocation into the immutable hash chain.
+        5. Return comprehensive structured result ensuring idempotency and failure tracing.
         """
         with self.db.connection_context() as conn:
             cursor = conn.cursor()
-            # Lock the compromised issuer account immediately
+            cursor.execute("SELECT id, username, full_name, role, status FROM users WHERE id = ?;", (issuer_id,))
+            target_user = cursor.fetchone()
+            if not target_user:
+                raise ValueError(f"Không tìm thấy tài khoản người dùng với ID: {issuer_id}")
+
+            target_dict = dict(target_user)
+            if target_dict["role"] != "ISSUER":
+                raise ValueError(
+                    f"Tài khoản mục tiêu '{target_dict['username']}' có vai trò '{target_dict['role']}'. "
+                    f"Quy trình xử lý sự cố Issuer chỉ được phép áp dụng cho tài khoản ISSUER, "
+                    f"không được xử lý nhầm tài khoản AUDITOR hoặc PUBLIC_VERIFIER!"
+                )
+
+            # Idempotent lock of the issuer account
             cursor.execute("UPDATE users SET status = 'COMPROMISED' WHERE id = ?;", (issuer_id,))
+
+            # Inventory ACTIVE documents
             cursor.execute(
                 "SELECT doc_uuid FROM documents WHERE issuer_id = ? AND status = 'ACTIVE';",
                 (issuer_id,)
             )
             rows = cursor.fetchall()
-            target_uuids = [r["doc_uuid"] for r in rows]
+            active_uuids = [r["doc_uuid"] for r in rows]
 
-        revoked_uuids = []
-        for doc_uuid in target_uuids:
-            self.revoke_document(
-                doc_uuid=doc_uuid,
-                reason=f"[SỰ CỐ AN NINH / TÀI KHOẢN BỊ XÂM PHẠM] {reason}",
-                revoked_by=revoked_by
-            )
-            revoked_uuids.append(doc_uuid)
-        return revoked_uuids
+        revoked_uuids: list[str] = []
+        failed_uuids: list[dict[str, str]] = []
+
+        now_str = datetime.now(timezone.utc).isoformat()
+        reason_clean = f"[SỰ CỐ AN NINH / TÀI KHOẢN BỊ XÂM PHẠM] {reason.strip()}"
+
+        # Revoke documents atomically within a single connection transaction
+        with self.db.connection_context() as conn:
+            cursor = conn.cursor()
+            for doc_uuid in active_uuids:
+                try:
+                    # Update document status
+                    cursor.execute("UPDATE documents SET status = 'REVOKED' WHERE doc_uuid = ?;", (doc_uuid,))
+                    # Record revocation
+                    cursor.execute("""
+                        INSERT INTO revocations (doc_uuid, revoked_by, revocation_reason, revoked_at)
+                        VALUES (?, ?, ?, ?);
+                    """, (doc_uuid, revoked_by, reason_clean, now_str))
+
+                    # Fetch last block
+                    cursor.execute("SELECT block_index, block_hash FROM audit_blocks ORDER BY block_index DESC LIMIT 1;")
+                    last_block = cursor.fetchone()
+                    new_block_index = last_block["block_index"] + 1
+                    prev_block_hash = last_block["block_hash"]
+
+                    revoke_payload_hash = calculate_bytes_hash(f"REVOCATION:{doc_uuid}:{reason_clean}".encode("utf-8"))
+                    new_block_hash = calculate_block_hash(
+                        block_index=new_block_index,
+                        prev_block_hash=prev_block_hash,
+                        timestamp=now_str,
+                        action="REVOKE",
+                        doc_uuid=doc_uuid,
+                        payload_hash=revoke_payload_hash
+                    )
+
+                    cursor.execute("""
+                        INSERT INTO audit_blocks (
+                            block_index, prev_block_hash, timestamp, action, doc_uuid, payload_hash, block_hash
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                    """, (
+                        new_block_index, prev_block_hash, now_str, "REVOKE", doc_uuid, revoke_payload_hash, new_block_hash
+                    ))
+                    revoked_uuids.append(doc_uuid)
+                except Exception as exc:
+                    failed_uuids.append({"doc_uuid": doc_uuid, "error": str(exc)})
+
+        return IncidentRevokeResult(
+            revoked_uuids=revoked_uuids,
+            status="INCIDENT_RESOLVED" if not failed_uuids else "PARTIALLY_RESOLVED",
+            issuer_id=issuer_id,
+            issuer_username=target_dict["username"],
+            account_status="COMPROMISED",
+            failed_count=len(failed_uuids),
+            failed_uuids=failed_uuids
+        )
 
 

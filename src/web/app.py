@@ -4,6 +4,7 @@ Implements Zero-Trust document issuance, verification, audit ledger inspection,
 and isolated attack simulation with hardened CSRF, rate-limiting, and open-redirect protections.
 """
 import os
+import uuid
 import shutil
 import secrets
 import time
@@ -30,6 +31,9 @@ from ..models.database import DatabaseManager, get_db
 from ..services.auth_service import AuthService, require_role
 from ..services.doc_service import DocumentService, sanitize_filename, mask_recipient_name
 from ..services.audit_service import AuditService
+from ..services.security_event_service import SecurityEventService
+from ..ml.behavior_detector import IsolationForestDetector, RuleBasedBaseline
+from ..ml.feature_extractor import extract_features_from_events, explain_features
 from ..services.verify_engine import VerificationEngine
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
@@ -57,9 +61,6 @@ def sanitize_verify_result_for_public(result: dict | None, is_authenticated: boo
         if not is_authenticated:
             if doc.get("recipient_name"):
                 doc["recipient_name"] = mask_recipient_name(doc["recipient_name"])
-            if doc.get("doc_uuid"):
-                raw_u = doc["doc_uuid"]
-                doc["doc_uuid"] = raw_u[:8] + "-****-****-****-" + raw_u[-12:]
         clean_res["document"] = doc
     return clean_res
 
@@ -106,6 +107,8 @@ def create_app(test_config=None) -> Flask:
     audit_svc = AuditService(db_mgr)
     sandbox_audit_svc = AuditService(sandbox_db_mgr)
     verify_engine = VerificationEngine(doc_svc, key_mgr, db_mgr)
+    sec_event_svc = SecurityEventService(db_mgr)
+    behavior_detector = IsolationForestDetector()
 
     app.db_mgr = db_mgr
     app.sandbox_db_mgr = sandbox_db_mgr
@@ -200,8 +203,6 @@ def create_app(test_config=None) -> Flask:
             masked_doc.pop("file_storage_path", None)
             if not is_authed:
                 masked_doc["recipient_name"] = mask_recipient_name(d["recipient_name"])
-                raw_u = d["doc_uuid"]
-                masked_doc["doc_uuid"] = raw_u[:8] + "-****-****-****-" + raw_u[-12:]
             recent_docs.append(masked_doc)
 
         return render_template("index.html", result=result, recent_docs=recent_docs)
@@ -300,10 +301,19 @@ def create_app(test_config=None) -> Flask:
             try:
                 user = auth_svc.authenticate(username, password, client_ip=client_ip)
             except PermissionError as e:
+                sec_event_svc.log_event(
+                    "AUTH_LOGIN_FAIL", status="FAILURE", username=username,
+                    ip_address=client_ip, user_agent=request.user_agent.string,
+                    metadata={"reason": "Rate limited / excessive failures"}
+                )
                 flash(str(e), "danger")
                 return render_template("login.html"), 429
 
             if user:
+                sec_event_svc.log_event(
+                    "AUTH_LOGIN_SUCCESS", status="SUCCESS", user_id=user["id"], username=user["username"],
+                    ip_address=client_ip, user_agent=request.user_agent.string
+                )
                 session.clear()
                 session["user"] = user
                 session["csrf_token"] = secrets.token_hex(32)
@@ -319,6 +329,11 @@ def create_app(test_config=None) -> Flask:
                     return redirect(url_for("audit_page"))
                 return redirect(url_for("index"))
             else:
+                sec_event_svc.log_event(
+                    "AUTH_LOGIN_FAIL", status="FAILURE", username=username,
+                    ip_address=client_ip, user_agent=request.user_agent.string,
+                    metadata={"reason": "Bad credentials"}
+                )
                 flash("Tên đăng nhập hoặc mật khẩu không chính xác!", "danger")
 
         return render_template("login.html")
@@ -352,6 +367,27 @@ def create_app(test_config=None) -> Flask:
             flash("Vui lòng điền đầy đủ thông tin và chọn tệp đính kèm", "warning")
             return redirect(url_for("dashboard"))
 
+        # Security Behavior Analytics: Evaluate issuer risk profile before issuance
+        user_events = sec_event_svc.get_user_events_window(user["id"], window_seconds=900)
+        feature_vector = extract_features_from_events(user_events)
+        risk_eval = behavior_detector.predict(feature_vector)
+
+        if risk_eval["risk_level"] == "CRITICAL":
+            # Demote status to SUSPICIOUS for auditor review
+            with db_mgr.connection_context() as conn:
+                conn.execute("UPDATE users SET status = 'SUSPICIOUS' WHERE id = ? AND status = 'ACTIVE';", (user["id"],))
+            sec_event_svc.log_event(
+                "DOC_ISSUE", status="WARNING", user_id=user["id"], username=user["username"],
+                ip_address=request.remote_addr or "127.0.0.1", user_agent=request.user_agent.string,
+                metadata={"action": "BLOCKED_BY_BEHAVIOR_ANALYTICS", "risk_eval": risk_eval}
+            )
+            flash(
+                f"Thao tác bị tạm chặn do phát hiện rủi ro bất thường (Risk Score: {risk_eval['risk_score']}/100 - "
+                f"{'; '.join(risk_eval['reasons'])}). Tài khoản đã được chuyển sang chế độ giám sát. Vui lòng liên hệ Kiểm toán viên.",
+                "danger"
+            )
+            return redirect(url_for("dashboard"))
+
         try:
             file_bytes = uploaded_file.read()
             doc = doc_svc.issue_document(
@@ -361,6 +397,11 @@ def create_app(test_config=None) -> Flask:
                 doc_type=doc_type,
                 file_bytes=file_bytes,
                 original_filename=uploaded_file.filename
+            )
+            sec_event_svc.log_event(
+                "DOC_ISSUE", status="SUCCESS", user_id=user["id"], username=user["username"],
+                ip_address=request.remote_addr or "127.0.0.1", user_agent=request.user_agent.string,
+                metadata={"doc_uuid": doc["doc_uuid"], "title": doc["title"]}
             )
             flash(f"Phát hành và ký số văn bản thành công! Mã chứng nhận: {doc['doc_uuid']}", "success")
         except PermissionError as e:
@@ -376,9 +417,20 @@ def create_app(test_config=None) -> Flask:
     @require_role("ISSUER")
     def revoke_document(doc_uuid):
         user = session["user"]
+        doc = doc_svc.get_document_by_uuid(doc_uuid)
+        if not doc:
+            abort(404)
+        # Least Privilege: Issuer can only revoke their own documents
+        if doc["issuer_id"] != user["id"]:
+            abort(403)
         reason = request.form.get("reason", "Thu hồi theo quy định của cơ quan phát hành").strip()
         try:
             doc_svc.revoke_document(doc_uuid, revoked_by=user["id"], reason=reason)
+            sec_event_svc.log_event(
+                "DOC_REVOKE", status="SUCCESS", user_id=user["id"], username=user["username"],
+                ip_address=request.remote_addr or "127.0.0.1", user_agent=request.user_agent.string,
+                metadata={"doc_uuid": doc_uuid, "reason": reason}
+            )
             flash(f"Đã thu hồi thành công văn bản UUID: {doc_uuid}", "warning")
         except Exception as e:
             flash(f"Lỗi khi thu hồi văn bản: {str(e)}", "danger")
@@ -393,7 +445,131 @@ def create_app(test_config=None) -> Flask:
     def audit_page():
         blocks = audit_svc.get_all_audit_blocks()
         verification_status = audit_svc.verify_chain_integrity(require_genesis=True)
-        return render_template("audit.html", blocks=blocks, verification=verification_status)
+        latest_cp = audit_svc.get_latest_checkpoint()
+        all_cps = audit_svc.get_all_checkpoints()
+        recent_events = sec_event_svc.get_recent_events(limit=25)
+        event_stats = sec_event_svc.get_event_statistics()
+
+        # Load ML evaluation benchmark
+        ml_eval = None
+        eval_path = BASE_DIR / "src" / "ml" / "evaluation_results.json"
+        if eval_path.is_file():
+            try:
+                import json
+                with open(eval_path, "r", encoding="utf-8") as f:
+                    ml_eval = json.load(f)
+            except Exception:
+                pass
+
+        return render_template(
+            "audit.html",
+            blocks=blocks,
+            verification=verification_status,
+            latest_checkpoint=latest_cp,
+            checkpoints=all_cps,
+            recent_events=recent_events,
+            event_stats=event_stats,
+            ml_eval=ml_eval
+        )
+
+    # ---------------------------------------------------------
+    # Signed Checkpoint Management Endpoints (Auditor Only)
+    # ---------------------------------------------------------
+    @app.route("/api/audit/checkpoint/create", methods=["POST"])
+    @require_role("AUDITOR")
+    def api_create_checkpoint():
+        """Create and cryptographically sign a checkpoint of the current audit ledger state."""
+        user = session["user"]
+        try:
+            priv_pem = key_mgr.get_private_key_pem()
+            pub_pem = key_mgr.get_public_key_pem()
+            cp = audit_svc.create_and_store_checkpoint(
+                created_by=user["id"],
+                private_key_pem=priv_pem,
+                public_key_pem=pub_pem
+            )
+            sec_event_svc.log_event(
+                "SENSITIVE_ENDPOINT", status="SUCCESS", user_id=user["id"], username=user["username"],
+                ip_address=request.remote_addr or "127.0.0.1", user_agent=request.user_agent.string,
+                metadata={"action": "CREATE_CHECKPOINT", "sequence": cp["sequence"]}
+            )
+            return jsonify({
+                "status": "SUCCESS",
+                "message": f"Đã tạo và ký số thành công Checkpoint #{cp['sequence']}.",
+                "checkpoint": cp
+            })
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)}), 400
+
+    @app.route("/api/audit/checkpoint/verify", methods=["POST"])
+    @require_role("AUDITOR")
+    def api_verify_checkpoint():
+        """Verify live database hash chain against a signed checkpoint."""
+        data = request.get_json(silent=True) or {}
+        cp_data = data.get("checkpoint")
+        if not cp_data:
+            cp_data = audit_svc.get_latest_checkpoint()
+            if not cp_data:
+                return jsonify({
+                    "is_valid": False,
+                    "status": "NO_CHECKPOINT_FOUND",
+                    "message": "Hệ thống chưa có Checkpoint nào được tạo để đối soát."
+                }), 400
+
+        pub_pem = key_mgr.get_public_key_pem()
+        report = audit_svc.verify_with_checkpoint(cp_data, pub_pem)
+        return jsonify(report)
+
+    @app.route("/api/audit/checkpoint/download", methods=["GET"])
+    @require_role("AUDITOR")
+    def api_download_latest_checkpoint():
+        """Download the latest signed checkpoint as a standalone JSON file for independent storage."""
+        latest_cp = audit_svc.get_latest_checkpoint()
+        if not latest_cp:
+            abort(404)
+        import io
+        import json
+        cp_bytes = io.BytesIO(json.dumps(latest_cp, indent=2, ensure_ascii=False).encode("utf-8"))
+        filename = f"secudoc_checkpoint_seq{latest_cp.get('sequence', 1)}.json"
+        return send_file(cp_bytes, as_attachment=True, download_name=filename, mimetype="application/json")
+
+    @app.route("/api/audit/ml-evaluation", methods=["GET"])
+    @require_role("AUDITOR")
+    def api_get_ml_evaluation():
+        """Return real measured performance metrics from the ML Train/Val/Test benchmark."""
+        import json
+        eval_path = BASE_DIR / "src" / "ml" / "evaluation_results.json"
+        if not eval_path.is_file():
+            return jsonify({"error": "Benchmark data not generated"}), 404
+        with open(eval_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify(data)
+
+    @app.route("/api/incident/clear-suspicious", methods=["POST"])
+    @require_role("AUDITOR")
+    def api_clear_suspicious_account():
+        """Auditor review: dismiss suspicion and clear the SUSPICIOUS flag on an Issuer."""
+        data = request.get_json(silent=True) or {}
+        user_id = data.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Thiếu user_id"}), 400
+
+        auditor_user = session["user"]
+        with db_mgr.connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET status = 'ACTIVE' WHERE id = ? AND status = 'SUSPICIOUS';", (user_id,))
+            affected = cursor.rowcount
+
+        sec_event_svc.log_event(
+            "SENSITIVE_ENDPOINT", status="SUCCESS", user_id=auditor_user["id"], username=auditor_user["username"],
+            ip_address=request.remote_addr or "127.0.0.1", user_agent=request.user_agent.string,
+            metadata={"action": "CLEAR_SUSPICIOUS_FLAG", "target_user_id": user_id}
+        )
+
+        return jsonify({
+            "status": "SUCCESS" if affected > 0 else "NO_CHANGE",
+            "message": f"Đã gỡ cờ giám sát cho tài khoản ID {user_id}."
+        })
 
     @app.route("/api/audit/verify", methods=["GET"])
     @require_role("AUDITOR")
@@ -421,19 +597,26 @@ def create_app(test_config=None) -> Flask:
             return jsonify({"error": "Bad Request", "message": "issuer_id phải là số nguyên"}), 400
 
         auditor_user = session["user"]
-        revoked_uuids = doc_svc.emergency_batch_revoke(
-            issuer_id=issuer_id,
-            reason=reason,
-            revoked_by=auditor_user["id"]
-        )
+        try:
+            res = doc_svc.emergency_batch_revoke(
+                issuer_id=issuer_id,
+                reason=reason,
+                revoked_by=auditor_user["id"]
+            )
+        except ValueError as e:
+            return jsonify({"error": "Bad Request", "message": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": "Internal Error", "message": str(e)}), 500
 
         return jsonify({
-            "status": "INCIDENT_RESOLVED",
+            "status": res["status"],
             "issuer_id": issuer_id,
-            "account_status": "COMPROMISED",
-            "revoked_count": len(revoked_uuids),
-            "revoked_uuids": revoked_uuids,
-            "message": f"Đã khóa tài khoản Issuer (ID {issuer_id}) và thu hồi khẩn cấp {len(revoked_uuids)} văn bản."
+            "issuer_username": res.get("issuer_username"),
+            "account_status": res["account_status"],
+            "revoked_count": res["revoked_count"],
+            "revoked_uuids": res["revoked_uuids"],
+            "failed_count": res["failed_count"],
+            "message": f"Đã khóa tài khoản Issuer (ID {issuer_id}) và thu hồi khẩn cấp {res['revoked_count']} văn bản."
         })
 
     # ---------------------------------------------------------
@@ -603,6 +786,67 @@ def create_app(test_config=None) -> Flask:
             "verification": verification
         })
 
+    @app.route("/api/attack/rewrite-chain", methods=["POST"])
+    def api_attack_rewrite_chain():
+        """
+        Attack Lab Scenario: Full-Chain Rewrite Attack.
+        Modifies a block AND recalculates the hashes of all subsequent blocks.
+        Demonstrates that internal hash-chain check returns VALID, but external Signed Checkpoint
+        catches the tampering immediately!
+        Exclusively executed on isolated sandbox database.
+        """
+        client_ip = request.remote_addr or "127.0.0.1"
+        if not check_simulation_rate_limit(client_ip):
+            return jsonify({"error": "Rate limit exceeded", "message": "Quá nhiều yêu cầu mô phỏng. Vui lòng đợi 1 phút."}), 429
+
+        # Freshly sync sandbox from main db if sandbox was tampered
+        if not sandbox_audit_svc.verify_chain_integrity(require_genesis=True)["is_valid"]:
+            shutil.copy2(db_path, sandbox_db_path)
+
+        # Ensure sandbox has at least 3 blocks to demonstrate chain rewrite
+        s_blocks = sandbox_audit_svc.get_all_audit_blocks()
+        if len(s_blocks) < 3:
+            with sandbox_db_mgr.connection_context() as conn:
+                for i in range(len(s_blocks), 5):
+                    last_b = conn.execute("SELECT block_index, block_hash FROM audit_blocks ORDER BY block_index DESC LIMIT 1;").fetchone()
+                    prev_h = last_b["block_hash"]
+                    b_idx = last_b["block_index"] + 1
+                    b_hash = calculate_bytes_hash(f"SANDBOX_BLOCK_{b_idx}_{prev_h}".encode())
+                    conn.execute(
+                        "INSERT INTO audit_blocks (block_index, prev_block_hash, timestamp, action, doc_uuid, payload_hash, block_hash) "
+                        "VALUES (?, ?, '2026-10-30T10:00:00Z', 'ISSUE', ?, ?, ?);",
+                        (b_idx, prev_h, str(uuid.uuid4()), b_hash, b_hash)
+                    )
+
+        # Create trusted checkpoint BEFORE attack
+        priv_pem = key_mgr.get_private_key_pem()
+        pub_pem = key_mgr.get_public_key_pem()
+        trusted_cp = sandbox_audit_svc.create_and_store_checkpoint(created_by=1, private_key_pem=priv_pem, public_key_pem=pub_pem)
+
+        # Execute full-chain rewrite starting from block 1
+        tamper_success = sandbox_audit_svc.simulate_full_chain_rewrite(tamper_block_index=1, tampered_action="HACKER_REWRITTEN_ACTION")
+
+        # 1. Internal check
+        internal_check = sandbox_audit_svc.verify_chain_integrity(require_genesis=True)
+
+        # 2. Checkpoint check
+        cp_check = sandbox_audit_svc.verify_with_checkpoint(trusted_cp, pub_pem)
+
+        return jsonify({
+            "status": "FULL_CHAIN_REWRITE_EXECUTED",
+            "tamper_executed": tamper_success,
+            "target_database": "attack_sandbox.db (ISOLATED)",
+            "internal_chain_verification": internal_check,
+            "signed_checkpoint_verification": cp_check,
+            "trusted_checkpoint": trusted_cp,
+            "educational_insight": (
+                "Kẻ tấn công đã sửa Block 1 và tính lại hash của toàn bộ các block phía sau. "
+                "Kết quả: Kiểm tra nội bộ chuỗi báo TOÀN VẸN (is_valid=True) vì prev_block_hash khớp liên tục. "
+                "Tuy nhiên, Signed Checkpoint độc lập phát hiện đứt gãy ngay lập tức (FULL_CHAIN_REWRITE_DETECTED) "
+                "do hash của block cuối cùng không khớp với mốc đã ký số!"
+            )
+        })
+
     @app.route("/certificate/<doc_uuid>")
     def view_certificate(doc_uuid):
         """Display an official verifiable digital credential with PII protection."""
@@ -612,21 +856,22 @@ def create_app(test_config=None) -> Flask:
             return redirect(url_for("index"))
 
         user = session.get("user")
-        is_authorized = bool(user and (user.get("role") in ("ISSUER", "AUDITOR") or user.get("id") == doc["issuer_id"]))
+        # Least Privilege: Only the specific document owner (Issuer) or an AUDITOR can view full PII
+        is_owner = bool(user and user.get("id") == doc["issuer_id"])
+        is_auditor = bool(user and user.get("role") == "AUDITOR")
+        is_authorized = is_owner or is_auditor
 
-        # Data Minimization: If visitor is not an authorized issuer/auditor, mask recipient PII and redact internal UUID
+        # Data Minimization: If visitor is not the authorized owner or auditor, mask recipient PII and redact internal UUID
         display_doc = dict(doc)
         display_doc.pop("file_storage_path", None)
         if not is_authorized:
             display_doc["recipient_name"] = mask_recipient_name(doc["recipient_name"])
-            raw_u = doc["doc_uuid"]
-            display_doc["doc_uuid"] = raw_u[:8] + "-****-****-****-" + raw_u[-12:]
 
         public_key_pem = key_mgr.get_public_key_pem()
         root_fingerprint = key_mgr.get_public_key_fingerprint()
 
         # Build absolute verification URL for QR code
-        verify_url = request.url_root.rstrip("/") + "/?uuid=" + doc["doc_uuid"]
+        verify_url = request.url_root.rstrip("/") + "/certificate/" + doc["doc_uuid"]
         qr_data_uri = generate_qr_data_uri(verify_url)
 
         return render_template(

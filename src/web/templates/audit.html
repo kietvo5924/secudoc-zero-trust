@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}SecuDoc - Sổ Cái Bất Biến (Auditor){% endblock %}
+{% block title %}SecuDoc - Sổ Cái & Phân Tích An Ninh (Auditor){% endblock %}
 
 {% block content %}
 <div class="card-header">
   <div>
-    <h2>Sổ Cái Nhật Ký Mật Mã Bất Biến (Audit Ledger)</h2>
+    <h2>Sổ Cái Kiểm Toán & Phân Tích An Ninh (Auditor Center)</h2>
     <p style="color: var(--text-muted); font-size: 0.95rem;">
-      Mỗi hành động phát hành và thu hồi được liên kết chuỗi băm Merkle/Hash Chain. Bất kỳ can thiệp nội bộ nào vào SQLite đều bị phát hiện ngay lập tức.
+      Kiểm soát tính toàn vẹn của chuỗi băm (Cryptographic Hash Chain), đối soát mốc kiểm toán độc lập (Signed Checkpoints) và giám sát hành vi bất thường bằng Machine Learning (Isolation Forest).
     </p>
   </div>
   <div>
@@ -29,8 +29,208 @@
   {% endif %}
 </div>
 
-<!-- Ledger Table -->
-<div class="glass-card">
+<!-- ========================================================= -->
+<!-- 1. SIGNED CHECKPOINT MANAGEMENT PANEL                    -->
+<!-- ========================================================= -->
+<div class="glass-card" style="margin-top: 1.5rem; border-left: 4px solid var(--accent-cyan);">
+  <div class="card-header">
+    <div>
+      <h3 style="color: var(--text-main); margin-bottom: 0.25rem;">
+        Mốc Kiểm Toán Ký Số Độc Lập (Signed Checkpoints)
+      </h3>
+      <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0;">
+        Bảo vệ khả năng kiểm chứng lịch sử trước kẻ tấn công có quyền quản trị cơ sở dữ liệu (chống tấn công viết lại toàn bộ chuỗi hoặc khôi phục snapshot cũ).
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      <button type="button" class="btn btn-primary" onclick="createSignedCheckpoint()">
+        Tạo Checkpoint Mới
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="verifySignedCheckpoint()">
+        Đối Soát Với Checkpoint
+      </button>
+      {% if latest_checkpoint %}
+      <a href="/api/audit/checkpoint/download" class="btn btn-secondary">
+        Tải Checkpoint (.json)
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div id="checkpointActionResult"></div>
+
+  {% if latest_checkpoint %}
+  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; margin-top: 1rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; font-size: 0.88rem;">
+      <div>
+        <span style="color: var(--text-muted);">Mốc Checkpoint:</span>
+        <strong style="color: var(--accent-cyan);">#{{ latest_checkpoint.sequence }}</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-muted);">Khối Xác Nhận Cuối:</span>
+        <strong>Khối #{{ latest_checkpoint.last_block_index }}</strong> (Tổng: {{ latest_checkpoint.total_blocks }} khối)
+      </div>
+      <div>
+        <span style="color: var(--text-muted);">Thời Gian Ký:</span>
+        <span class="mono">{{ latest_checkpoint.timestamp }}</span>
+      </div>
+      <div>
+        <span style="color: var(--text-muted);">Khóa Ký (Fingerprint):</span>
+        <span class="mono">{{ latest_checkpoint.root_key_fingerprint[:16] }}...</span>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.85rem;" class="mono">
+      <span style="color: var(--text-muted);">Mã Băm Khối Xác Nhận (Last Block Hash):</span>
+      <span class="hash-pill" style="font-weight: bold; color: var(--text-main);">{{ latest_checkpoint.last_block_hash }}</span>
+    </div>
+  </div>
+  {% else %}
+  <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 1rem; margin-top: 1rem; text-align: center; color: var(--text-muted); font-size: 0.9rem;">
+    Hệ thống chưa tạo bản Signed Checkpoint nào. Hãy nhấn <strong>"Tạo Checkpoint Mới"</strong> để thiết lập mốc tin cậy độc lập.
+  </div>
+  {% endif %}
+</div>
+
+<!-- ========================================================= -->
+<!-- 2. SECURITY BEHAVIOR ANALYTICS & ML BENCHMARK PANEL       -->
+<!-- ========================================================= -->
+<div class="glass-card" style="margin-top: 1.5rem; border-left: 4px solid #8b5cf6;">
+  <div class="card-header">
+    <div>
+      <h3 style="color: var(--text-main); margin-bottom: 0.25rem;">
+        Phân Tích Hành Vi An Ninh & Thực Nghiệm Máy Học (ML Security Analytics)
+      </h3>
+      <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0;">
+        Giám sát hành vi bất thường của tài khoản phát hành (đăng nhập thất bại, phát hành ồ ạt, thao tác ngoài giờ). Đánh giá độc lập mô hình Isolation Forest so với Rule-Based Baseline.
+      </p>
+    </div>
+  </div>
+
+  <!-- Telemetry Counters -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; margin-bottom: 1.5rem;">
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; text-align: center;">
+      <div style="color: var(--text-muted); font-size: 0.85rem;">Tổng Sự Kiện An Ninh</div>
+      <div style="font-size: 1.8rem; font-weight: 700; color: var(--text-main); margin-top: 0.25rem;">{{ event_stats.total_events }}</div>
+    </div>
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; text-align: center;">
+      <div style="color: var(--text-muted); font-size: 0.85rem;">Phát Hiện Bất Thường / Cảnh Báo</div>
+      <div style="font-size: 1.8rem; font-weight: 700; color: var(--accent-red); margin-top: 0.25rem;">{{ event_stats.anomaly_candidates }}</div>
+    </div>
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; text-align: center;">
+      <div style="color: var(--text-muted); font-size: 0.85rem;">Mô Hình Đang Hoạt Động</div>
+      <div style="font-size: 1.1rem; font-weight: 700; color: #8b5cf6; margin-top: 0.6rem;">Isolation Forest + Baseline</div>
+    </div>
+  </div>
+
+  <!-- ML Benchmark Independent Test Results Table -->
+  {% if ml_eval %}
+  <h4 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--text-main);">
+    Kết Quả Đánh Giá Thực Nghiệm Trên Tập Test Độc Lập (N = {{ ml_eval.dataset_metadata.split_distribution.test_samples }} mẫu độc lập)
+  </h4>
+  <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+    Quy trình phân chia chuẩn: Train (70%, {{ ml_eval.dataset_metadata.split_distribution.train_samples }} mẫu) - Validation (15%, {{ ml_eval.dataset_metadata.split_distribution.validation_samples }} mẫu) - Test (15%, {{ ml_eval.dataset_metadata.split_distribution.test_samples }} mẫu). Huấn luyện không nhìn trước dữ liệu kiểm thử.
+  </p>
+
+  <div class="table-responsive">
+    <table class="secu-table">
+      <thead>
+        <tr>
+          <th>Chỉ Số Đo Lường</th>
+          <th>Mô Hình ML (Isolation Forest)</th>
+          <th>Cơ Sở Luật Cứng (Rule-Based Baseline)</th>
+          <th>Ý Nghĩa Bảo Mật</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Precision (Độ chính xác)</strong></td>
+          <td><strong style="color: var(--accent-cyan);">{{ (ml_eval.isolation_forest.precision * 100)|round(1) }}%</strong></td>
+          <td>{{ (ml_eval.rule_based_baseline.precision * 100)|round(1) }}%</td>
+          <td>Tỷ lệ cảnh báo thực sự là hành vi bất thường</td>
+        </tr>
+        <tr>
+          <td><strong>Recall (Độ nhạy / Thu hồi)</strong></td>
+          <td><strong style="color: var(--accent-green);">{{ (ml_eval.isolation_forest.recall * 100)|round(1) }}%</strong></td>
+          <td>{{ (ml_eval.rule_based_baseline.recall * 100)|round(1) }}%</td>
+          <td>Khả năng bắt trọn các cuộc tấn công không bỏ sót</td>
+        </tr>
+        <tr>
+          <td><strong>F1-Score</strong></td>
+          <td><strong>{{ ml_eval.isolation_forest.f1_score }}</strong></td>
+          <td>{{ ml_eval.rule_based_baseline.f1_score }}</td>
+          <td>Trung bình điều hòa giữa Precision và Recall</td>
+        </tr>
+        <tr>
+          <td><strong>ROC-AUC</strong></td>
+          <td><strong style="color: #8b5cf6;">{{ ml_eval.isolation_forest.roc_auc }}</strong></td>
+          <td>N/A (Luật nhị phân rời rạc)</td>
+          <td>Năng lực phân biệt không gian ranh giới rủi ro</td>
+        </tr>
+        <tr>
+          <td><strong>False Positive Rate (Báo nhầm)</strong></td>
+          <td>{{ (ml_eval.isolation_forest.false_positive_rate * 100)|round(1) }}%</td>
+          <td>{{ (ml_eval.rule_based_baseline.false_positive_rate * 100)|round(1) }}%</td>
+          <td>Tỷ lệ người dùng bình thường bị gắn cờ nhầm</td>
+        </tr>
+        <tr>
+          <td><strong>Độ Trễ Suy Luận (Latency)</strong></td>
+          <td><span class="mono">{{ ml_eval.isolation_forest.inference_latency_ms }} ms/mẫu</span></td>
+          <td><span class="mono">{{ ml_eval.rule_based_baseline.inference_latency_ms }} ms/mẫu</span></td>
+          <td>Thời gian phản hồi tính toán tại backend</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Recent Security Events Subtable -->
+  <h4 style="font-size: 1rem; margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--text-main);">
+    Nhật Ký Sự Kiện An Ninh Gần Đây (Security Audit Telemetry)
+  </h4>
+  <div class="table-responsive">
+    <table class="secu-table">
+      <thead>
+        <tr>
+          <th>Thời Gian</th>
+          <th>Tài Khoản</th>
+          <th>Loại Sự Kiện</th>
+          <th>Trạng Thái</th>
+          <th>Địa Chỉ IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in recent_events %}
+        <tr>
+          <td><small class="mono">{{ ev.created_at }}</small></td>
+          <td><strong>{{ ev.username or 'Ẩn danh' }}</strong></td>
+          <td><span class="mono" style="font-size: 0.85rem;">{{ ev.event_type }}</span></td>
+          <td>
+            {% if ev.status == 'SUCCESS' %}
+              <span class="user-badge" style="background: #f0fdf4; color: var(--accent-green); border-color: #bbf7d0;">SUCCESS</span>
+            {% elif ev.status == 'WARNING' %}
+              <span class="user-badge" style="background: #fefce8; color: #b45309; border-color: #fef08a;">WARNING</span>
+            {% else %}
+              <span class="user-badge" style="background: #fef2f2; color: var(--accent-red); border-color: #fecaca;">FAILURE</span>
+            {% endif %}
+          </td>
+          <td><small class="mono">{{ ev.ip_address }}</small></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">
+            Chưa có sự kiện an ninh nào được ghi nhận trong phiên hiện tại.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- 3. HASH CHAIN AUDIT BLOCKS TABLE                          -->
+<!-- ========================================================= -->
+<div class="glass-card" style="margin-top: 1.5rem;">
   <div class="card-header">
     <h3>Danh Sách Các Khối Sổ Cái (Tổng: {{ blocks|length }} Blocks)</h3>
     <small style="color: var(--text-muted);">
@@ -74,21 +274,4 @@
   </div>
 </div>
 
-<!-- Interactive Internal Threat Simulation Card -->
-<div class="glass-card" style="border: 1px dashed var(--accent-red); margin-top: 2rem;">
-  <h3 style="color: var(--accent-red); margin-bottom: 0.75rem;">
-    Thử Nghiệm Mô Phỏng: Kẻ Gian Nội Bộ Sửa Trực Tiếp Database SQLite
-  </h3>
-  <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">
-    Nếu một người quản trị biến chất dùng công cụ DB Browser sửa đổi trường dữ liệu của Block 0 nhằm ngụy tạo lịch sử, chuỗi liên kết sẽ lập tức đứt gãy.
-  </p>
-  <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-    <button type="button" class="btn btn-danger" onclick="runDatabaseTamper(0)">
-      Can Thiệp Sửa Lén Block 0 & Kiểm Toán Lại
-    </button>
-    <button type="button" class="btn btn-secondary" onclick="runRestoreDatabase(0)">
-      Khôi Phục Dữ Liệu Gốc (Self-Healing Revert)
-    </button>
-  </div>
-</div>
 {% endblock %}

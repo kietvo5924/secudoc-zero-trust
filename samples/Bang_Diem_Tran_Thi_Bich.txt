@@ -6,3 +6,4 @@ Mon 1: Bao Mat Mang May Tinh va He Thong - Diem: 10.0
 Mon 2: Mat Ma Hoc Co So va Ung Dung - Diem: 9.5
 Mon 3: Lap Trinh An Toan - Diem: 9.8
 Xep loai chung: XUAT SAC
+name

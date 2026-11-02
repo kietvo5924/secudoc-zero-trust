@@ -104,6 +104,7 @@
         name="claimed_uuid" 
         class="form-control mono" 
         placeholder="Ví dụ: 8a4b6c2d-9e1f-4a3b-8c5d-7e9f1a2b3c4d"
+        value="{{ request.args.get('uuid', '') }}"
       >
     </div>
 
@@ -316,13 +317,9 @@
             {% endif %}
           </td>
           <td>
-            {% if current_user and current_user.role in ['ISSUER', 'AUDITOR'] %}
-              <a href="/certificate/{{ doc.doc_uuid }}" target="_blank" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem; text-decoration: none;">
-                Xem
-              </a>
-            {% else %}
-              <span style="font-size: 0.8rem; color: var(--text-muted);">Bảo vệ PII</span>
-            {% endif %}
+            <a href="/certificate/{{ doc.doc_uuid }}" target="_blank" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem; text-decoration: none;">
+              Xem Phiếu
+            </a>
           </td>
         </tr>
         {% endfor %}
